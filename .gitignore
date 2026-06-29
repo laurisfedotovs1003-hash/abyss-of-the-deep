@@ -1,0 +1,26 @@
+# Rojo build output
+build/
+
+# Wally packages
+Packages/
+wally.lock
+
+# Roblox Studio files
+*.rbxl
+*.rbxlx
+*.rbxmx
+*.rbxm
+
+# IDE/Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

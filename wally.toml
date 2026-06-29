@@ -1,0 +1,13 @@
+[package]
+name = "nexus-blox-studios/abyss-of-the-deep"
+description = "A deep-sea exploration and survival game on Roblox"
+version = "0.1.0"
+registry = "https://github.com/UpliftGames/wally-index"
+realm = "shared"
+
+[dependencies]
+Knit = "sleitnick/knit@1.4.7"
+ProfileService = "madstudios/profile-service@2.0.0"
+
+[server-dependencies]
+DataStore2 = "kampfkarren/data-store-2@3.2.0"

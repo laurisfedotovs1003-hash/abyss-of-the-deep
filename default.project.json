@@ -1,0 +1,30 @@
+{
+  "name": "abyss-of-the-deep",
+  "tree": {
+    "$className": "DataModel",
+    "ServerScriptService": {
+      "$className": "ServerScriptService",
+      "Knit": {
+        "$path": "src/server"
+      }
+    },
+    "ReplicatedStorage": {
+      "$className": "ReplicatedStorage",
+      "KnitShared": {
+        "$path": "src/shared"
+      },
+      "KnitPackages": {
+        "$path": "Packages"
+      }
+    },
+    "StarterPlayer": {
+      "$className": "StarterPlayer",
+      "StarterPlayerScripts": {
+        "$className": "StarterPlayerScripts",
+        "Knit": {
+          "$path": "src/client"
+        }
+      }
+    }
+  }
+}
