@@ -4,7 +4,6 @@
 ]]
 
 local Knit = require(game:GetService("ReplicatedStorage"):WaitForChild("Packages"):WaitForChild("Knit"):WaitForChild("Knit"))
-local DataStoreManager = require(script.DataStoreManager)
 
 -- Register all services
 local services = script.Services:GetChildren()
@@ -20,6 +19,7 @@ for _, serviceModule in ipairs(services) do
 end
 
 -- Initialize DataStore manager
+local DataStoreManager = require(script.datastore.DataStoreManager)
 DataStoreManager:Initialize()
 
 -- Start Knit

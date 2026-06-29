@@ -6,6 +6,26 @@
 local Config = {}
 
 -- ============================================================
+-- Currency Definitions
+-- ============================================================
+
+Config.Currency = {
+	Credits = {
+		DisplayName = "Credits",
+		Symbol = "₡",
+		Description = "Standard currency earned from selling creatures and completing dives",
+		StartingAmount = 50,
+	},
+	ResearchPoints = {
+		DisplayName = "Research Points",
+		Symbol = "◎",
+		Description = "Premium currency earned from discoveries, achievements, and purchases",
+		StartingAmount = 0,
+		ConversionRate = 10, -- 1 RP = 10 Credits equivalent
+	}
+}
+
+-- ============================================================
 -- Depth Layer Definitions
 -- ============================================================
 
@@ -19,7 +39,8 @@ Config.DepthLayers = {
 		OxygenDrainRate = 1,
 		PressureMultiplier = 1,
 		CreatureRarityPool = {"Common"},
-		Description = "Warm, bright waters teeming with colorful reef fish"
+		Description = "Warm, bright waters teeming with colorful reef fish",
+		ResearchPointsPerEntry = 1, -- RP awarded for first time entering this zone
 	},
 	{
 		Name = "Twilight Zone",
@@ -30,7 +51,8 @@ Config.DepthLayers = {
 		OxygenDrainRate = 1.5,
 		PressureMultiplier = 2,
 		CreatureRarityPool = {"Common", "Uncommon"},
-		Description = "Fading light, strange shapes begin to emerge from the dark"
+		Description = "Fading light, strange shapes begin to emerge from the dark",
+		ResearchPointsPerEntry = 2,
 	},
 	{
 		Name = "Midnight Zone",
@@ -41,7 +63,8 @@ Config.DepthLayers = {
 		OxygenDrainRate = 2.5,
 		PressureMultiplier = 4,
 		CreatureRarityPool = {"Uncommon", "Rare"},
-		Description = "Total darkness — bioluminescence is the only light"
+		Description = "Total darkness — bioluminescence is the only light",
+		ResearchPointsPerEntry = 5,
 	},
 	{
 		Name = "Abyssal Zone",
@@ -52,7 +75,8 @@ Config.DepthLayers = {
 		OxygenDrainRate = 4,
 		PressureMultiplier = 8,
 		CreatureRarityPool = {"Rare", "Epic"},
-		Description = "The abyss — ancient creatures dwell in the crushing dark"
+		Description = "The abyss — ancient creatures dwell in the crushing dark",
+		ResearchPointsPerEntry = 10,
 	},
 	{
 		Name = "Trenches",
@@ -63,7 +87,8 @@ Config.DepthLayers = {
 		OxygenDrainRate = 6,
 		PressureMultiplier = 15,
 		CreatureRarityPool = {"Epic", "Legendary"},
-		Description = "The deepest places on Earth — few have ever returned"
+		Description = "The deepest places on Earth — few have ever returned",
+		ResearchPointsPerEntry = 20,
 	}
 }
 
@@ -73,13 +98,13 @@ Config.DepthLayers = {
 
 Config.Player = {
 	MaxOxygen = 100,
-	BaseSwimSpeed = 16,			-- Roblox studs/second
+	BaseSwimSpeed = 16,
 	SprintMultiplier = 1.6,
-	OxygenRefillRate = 15,		-- Oxygen per second at surface
-	OxygenCriticalThreshold = 20, -- Below this, warning effects activate
+	OxygenRefillRate = 15,
+	OxygenCriticalThreshold = 20,
 	BaseHealth = 100,
-	PressureDamageInterval = 3,	-- Seconds between pressure damage ticks
-	PressureDamagePerLevel = 5,	-- Damage per pressure level exceeded
+	PressureDamageInterval = 3,
+	PressureDamagePerLevel = 5,
 }
 
 -- ============================================================
@@ -93,7 +118,8 @@ Config.DivingGear = {
 		MaxDepth = 200,
 		OxygenBonus = 0,
 		SpeedModifier = 1,
-		Price = 0,				-- Free starter gear
+		Price = 0,
+		PriceCurrency = "Credits",
 		Description = "Standard snorkeling equipment — surface only"
 	},
 	{
@@ -103,6 +129,7 @@ Config.DivingGear = {
 		OxygenBonus = 50,
 		SpeedModifier = 1.1,
 		Price = 150,
+		PriceCurrency = "Credits",
 		Description = "Tank and regulator — reach the Twilight Zone"
 	},
 	{
@@ -112,6 +139,7 @@ Config.DivingGear = {
 		OxygenBonus = 125,
 		SpeedModifier = 1.2,
 		Price = 500,
+		PriceCurrency = "Credits",
 		Description = "Pressure-resistant suit with enhanced mobility"
 	},
 	{
@@ -121,6 +149,7 @@ Config.DivingGear = {
 		OxygenBonus = 250,
 		SpeedModifier = 0.9,
 		Price = 1500,
+		PriceCurrency = "Credits",
 		Description = "Heavy submersible — protects against extreme pressure"
 	},
 	{
@@ -130,6 +159,7 @@ Config.DivingGear = {
 		OxygenBonus = 500,
 		SpeedModifier = 1.4,
 		Price = 5000,
+		PriceCurrency = "Credits",
 		Description = "Cutting-edge exploration suit — nothing is out of reach"
 	}
 }
@@ -141,38 +171,48 @@ Config.DivingGear = {
 Config.CreatureRarity = {
 	Common = {
 		Weight = 50,
-		Color = Color3.fromRGB(180, 180, 180),	-- Gray
+		Color = Color3.fromRGB(180, 180, 180),
 		XPMultiplier = 1,
 		SellPriceMin = 5,
 		SellPriceMax = 15,
+		SellPriceCurrency = "Credits",
+		ResearchPointsOnFirstDiscovery = 1,
 	},
 	Uncommon = {
 		Weight = 30,
-		Color = Color3.fromRGB(30, 200, 80),	-- Green
+		Color = Color3.fromRGB(30, 200, 80),
 		XPMultiplier = 2,
 		SellPriceMin = 20,
 		SellPriceMax = 50,
+		SellPriceCurrency = "Credits",
+		ResearchPointsOnFirstDiscovery = 3,
 	},
 	Rare = {
 		Weight = 15,
-		Color = Color3.fromRGB(30, 144, 255),	-- Blue
+		Color = Color3.fromRGB(30, 144, 255),
 		XPMultiplier = 4,
 		SellPriceMin = 60,
 		SellPriceMax = 200,
+		SellPriceCurrency = "Credits",
+		ResearchPointsOnFirstDiscovery = 10,
 	},
 	Epic = {
 		Weight = 4,
-		Color = Color3.fromRGB(180, 0, 255),	-- Purple
+		Color = Color3.fromRGB(180, 0, 255),
 		XPMultiplier = 8,
 		SellPriceMin = 250,
 		SellPriceMax = 800,
+		SellPriceCurrency = "Credits",
+		ResearchPointsOnFirstDiscovery = 25,
 	},
 	Legendary = {
 		Weight = 1,
-		Color = Color3.fromRGB(255, 180, 0),	-- Gold
+		Color = Color3.fromRGB(255, 180, 0),
 		XPMultiplier = 16,
 		SellPriceMin = 1000,
 		SellPriceMax = 5000,
+		SellPriceCurrency = "Credits",
+		ResearchPointsOnFirstDiscovery = 50,
 	}
 }
 
@@ -185,11 +225,93 @@ Config.Economy = {
 	MaxCollectionSlots = 200,
 	XPPerDepthMeter = 0.5,
 	XPPerCreatureCaptured = 25,
+	CreditsPerDepthMeter = 0.1,
+	CreditsPerDiveComplete = 10,
+	ResearchPointsPerLevel = 5,
 	BaseBuildingCosts = {
-		Habitat = {Scrap = 50, Crystal = 10},
-		Greenhouse = {Scrap = 30, Crystal = 20},
-		Lab = {Scrap = 80, Crystal = 40},
-		DefenseTurret = {Scrap = 60, Crystal = 15},
+		Habitat = {Credits = 100, Scrap = 50, Crystal = 10},
+		Greenhouse = {Credits = 75, Scrap = 30, Crystal = 20},
+		Lab = {Credits = 200, Scrap = 80, Crystal = 40},
+		DefenseTurret = {Credits = 150, Scrap = 60, Crystal = 15},
+		Decoration = {Credits = 25, Scrap = 10},
+	},
+}
+
+-- ============================================================
+-- Shop Definitions
+-- ============================================================
+
+Config.ShopItems = {
+	-- Consumables
+	OxygenTank = {
+		Name = "Emergency Oxygen Tank",
+		Description = "Refills 50% of your oxygen instantly",
+		Category = "Consumable",
+		Price = 25,
+		PriceCurrency = "Credits",
+		Effect = "RefillOxygen",
+		EffectValue = 0.5,
+		MaxStack = 10,
+	},
+	RareBait = {
+		Name = "Rare Lure",
+		Description = "Attracts rare creatures for 60 seconds",
+		Category = "Consumable",
+		Price = 50,
+		PriceCurrency = "Credits",
+		Effect = "RareLure",
+		EffectValue = 60,
+		MaxStack = 5,
+	},
+	SpeedBoost = {
+		Name = "Propulsion Boost",
+		Description = "+40% swim speed for 30 seconds",
+		Category = "Consumable",
+		Price = 30,
+		PriceCurrency = "Credits",
+		Effect = "SpeedBoost",
+		EffectValue = 30,
+		MaxStack = 5,
+	},
+	
+	-- Gear (referenced by Config.DivingGear, shown in shop)
+	-- Base building modules
+	Decoration_PottedPlant = {
+		Name = "Potted Seaweed",
+		Description = "A decorative plant for your base",
+		Category = "Decoration",
+		Price = 15,
+		PriceCurrency = "Credits",
+		ModuleType = "Decoration",
+	},
+	Decoration_Biolight = {
+		Name = "Bioluminescent Light",
+		Description = "Glowing light fixture for your base",
+		Category = "Decoration",
+		Price = 40,
+		PriceCurrency = "Credits",
+		ModuleType = "Decoration",
+		ResearchPointPrice = 2,
+	},
+	
+	-- Research Point shop (premium)
+	Research_XPBooster = {
+		Name = "XP Booster",
+		Description = "Double XP for 1 hour",
+		Category = "Research",
+		Price = 15,
+		PriceCurrency = "ResearchPoints",
+		Effect = "XPBooster",
+		EffectValue = 3600,
+	},
+	Research_LuckyCharm = {
+		Name = "Lucky Charm",
+		Description = "+25% catch rate for 30 minutes",
+		Category = "Research",
+		Price = 10,
+		PriceCurrency = "ResearchPoints",
+		Effect = "CatchBoost",
+		EffectValue = 1800,
 	},
 }
 
@@ -202,6 +324,7 @@ Config.GamePasses = {
 	SpeedDiver = 0,				-- +20% swim speed
 	ExpandedCollection = 0,		-- Double collection slots
 	AbyssalPass = 0,			-- Access to exclusive trench content
+	ResearchPointsPack = 0,		-- Bonus Research Points
 }
 
 -- ============================================================
@@ -209,10 +332,13 @@ Config.GamePasses = {
 -- ============================================================
 
 Config.DeveloperProducts = {
-	OxygenRefillPack = 0,		-- Consumable oxygen refill bundle
-	BaitPack = 0,				-- Rare bait bundle
-	DecorativeBundle = 0,		-- Base decoration items
-	XPBooster = 0,				-- 2x XP for 1 hour
+	Credits_500 = 0,
+	Credits_2000 = 0,
+	Credits_10000 = 0,
+	ResearchPoints_10 = 0,
+	ResearchPoints_50 = 0,
+	ResearchPoints_250 = 0,
+	StarterPack = 0,
 }
 
 -- ============================================================
@@ -221,7 +347,7 @@ Config.DeveloperProducts = {
 
 Config.Analytics = {
 	Enabled = true,
-	SessionTimeout = 300,		-- Seconds of inactivity to end session
+	SessionTimeout = 300,
 	EventPrefix = "Abyss_",
 }
 
