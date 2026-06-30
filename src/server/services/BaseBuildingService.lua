@@ -1,11 +1,19 @@
 --[[
-	BaseBuildingService — Handles underwater habitat construction and upgrades
-	Players can build, upgrade, and decorate their deep-sea bases.
-	Integrated with EconomyService for purchase checking and DataStoreManager for persistence.
+	BaseBuildingService — Simplified underwater base construction (v2)
+	Players can build Habitats and Labs, upgrade them, and persist via ProfileService.
+	
+	Design (per lead instructions):
+	- 2 module types: Habitat (₡100) → Provides oxygen regen, Lab (₡150) → Research bonuses
+	- 3 upgrade tiers per module (cost scales: T2=1.5x, T3=3x base price)
+	- Max 10 modules per player
+	- Credit-based economy (spends from EconomyService)
+	- Persisted via DataStoreManager (ProfileService pattern)
 ]]
 
 local Knit = Knit or require(game:GetService("ReplicatedStorage"):WaitForChild("Packages"):WaitForChild("Knit"))
 local Config = require(game:GetService("ReplicatedStorage"):WaitForChild("KnitShared"):WaitForChild("Modules"):WaitForChild("Config"))
+
+local VALID_MODULES = { Habitat = true, Lab = true }
 
 local BaseBuildingService = Knit.CreateService {
 	Name = "BaseBuildingService",
@@ -13,6 +21,7 @@ local BaseBuildingService = Knit.CreateService {
 		BaseSynced = Knit.CreateSignal(),
 		ModulePlaced = Knit.CreateSignal(),
 		ModuleRemoved = Knit.CreateSignal(),
+		ModuleUpgraded = Knit.CreateSignal(),
 		PlaceModule = Knit.CreateSignal(),
 		RemoveModule = Knit.CreateSignal(),
 		UpgradeModule = Knit.CreateSignal(),
@@ -20,53 +29,60 @@ local BaseBuildingService = Knit.CreateService {
 	}
 }
 
-local PLAYER_MAX_MODULES = 20
+local playerBases = {} -- { [UserId] = { modules = {}, location = Vector3 } }
 
--- Player base state (loaded from DataStore on login)
-local playerBases = {} -- { [UserId] = { modules = {}, location = Vector3, totalModules = 0, powerLevel = 0 } }
+-- ============================================================
+-- Helpers
+-- ============================================================
+
+local function GetDataStoreManager()
+	return require(game:GetService("ServerScriptService"):WaitForChild("Knit"):WaitForChild("datastore"):WaitForChild("DataStoreManager"))
+end
+
+local function SaveModules(player, base)
+	local DataStoreManager = GetDataStoreManager()
+	DataStoreManager:UpdateProfile(player, function(profile)
+		profile.BaseModules = base.modules
+	end)
+end
+
+local function FireBaseSync(player, base, extra)
+	local data = {
+		modules = base.modules,
+		totalModules = #base.modules,
+		maxModules = Config.Economy.BaseBuildingCosts.MaxModules or 10,
+	}
+	if extra then
+		for k, v in pairs(extra) do data[k] = v end
+	end
+	BaseBuildingService.Client:Get("BaseSynced"):Fire(player, data)
+end
 
 -- ============================================================
 -- Initialize
 -- ============================================================
 
 function BaseBuildingService:KnitStart()
-	print("[BaseBuildingService] Initialized")
+	print("[BaseBuildingService] Initialized (simplified: Habitat + Lab)")
 end
 
 function BaseBuildingService:ReloadFromProfile(player)
-	local DataStoreManager = require(game:GetService("ServerScriptService"):WaitForChild("Knit"):WaitForChild("datastore"):WaitForChild("DataStoreManager"))
-	local profileSync = DataStoreManager:GetPlayerProfileSync(player)
+	local profileSync = GetDataStoreManager():GetPlayerProfileSync(player)
 	
 	playerBases[player.UserId] = {
 		modules = profileSync.BaseModules or {},
-		location = Vector3.new(
-			(profileSync.BaseLocation and profileSync.BaseLocation.X) or 0,
-			(profileSync.BaseLocation and profileSync.BaseLocation.Y) or 0,
-			(profileSync.BaseLocation and profileSync.BaseLocation.Z) or 0
-		),
-		totalModules = #(profileSync.BaseModules or {}),
-		powerLevel = 0,
+		location = profileSync.BaseLocation or Vector3.new(0, -50, 0), -- Default underwater base location
 	}
 	
 	print(string.format("[BaseBuildingService] Loaded base for %s (%d): %d modules",
-		player.Name, player.UserId, playerBases[player.UserId].totalModules))
+		player.Name, player.UserId, #playerBases[player.UserId].modules))
 end
 
 function BaseBuildingService:PlayerRemoving(player)
-	-- Sync base data before removal
-	local data = playerBases[player.UserId]
-	if data then
-		local DataStoreManager = require(game:GetService("ServerScriptService"):WaitForChild("Knit"):WaitForChild("datastore"):WaitForChild("DataStoreManager"))
-		DataStoreManager:UpdateProfile(player, function(profile)
-			profile.BaseModules = data.modules
-			profile.BaseLocation = {
-				X = data.location.X,
-				Y = data.location.Y,
-				Z = data.location.Z,
-			}
-		end)
+	local base = playerBases[player.UserId]
+	if base then
+		SaveModules(player, base)
 	end
-	
 	playerBases[player.UserId] = nil
 end
 
@@ -78,67 +94,58 @@ function BaseBuildingService:PlaceModule(player, moduleType, position, orientati
 	local base = playerBases[player.UserId]
 	if not base then return { success = false, reason = "Base not found" } end
 	
-	-- Validate module type
-	local cost = Config.Economy.BaseBuildingCosts[moduleType]
-	if not cost then
-		return { success = false, reason = "Invalid module type. Available: Habitat, Greenhouse, Lab, DefenseTurret, Decoration" }
+	-- Validate module type (only Habitat and Lab)
+	if not VALID_MODULES[moduleType] then
+		return { success = false, reason = "Invalid module type. Available: Habitat, Lab" }
 	end
 	
 	-- Check max modules
-	if base.totalModules >= PLAYER_MAX_MODULES then
-		return { success = false, reason = "Maximum modules reached (" .. PLAYER_MAX_MODULES .. ")" }
+	local maxModules = Config.Economy.BaseBuildingCosts.MaxModules or 10
+	if #base.modules >= maxModules then
+		return { success = false, reason = "Maximum modules reached (" .. maxModules .. ")" }
 	end
 	
-	-- Check economy: deduct Credits cost
+	-- Check and spend Credits
+	local cost = Config.Economy.BaseBuildingCosts[moduleType]
+	if not cost then return { success = false, reason = "Module cost not defined" } end
+	
 	local EconomyService = Knit.GetService("EconomyService")
 	if EconomyService then
 		local creditCost = cost.Credits or 0
-		if creditCost > 0 then
-			if not EconomyService:SpendCredits(player, creditCost) then
-				return { success = false, reason = "Not enough Credits! Need ₡" .. creditCost }
-			end
+		if creditCost > 0 and not EconomyService:SpendCredits(player, creditCost) then
+			return { success = false, reason = "Not enough Credits! Need ₡" .. creditCost .. " for " .. moduleType }
 		end
 	end
 	
-	-- Create module
+	-- Create module instance
 	local moduleData = {
-		Id = tostring(os.time()) .. "_" .. tostring(math.random(1000, 9999)),
+		Id = tostring(os.time()) .. "_" .. tostring(math.random(10000, 99999)),
 		Type = moduleType,
 		Position = {
 			X = position and position.X or 0,
 			Y = position and position.Y or 0,
 			Z = position and position.Z or 0,
 		},
-		Orientation = orientation or { 0, 0, 0, 1 }, -- Default CFrame rotation
 		Tier = 1,
 		Health = 100,
-		IsPowered = false,
 		PlacedAt = os.time(),
 	}
 	
 	table.insert(base.modules, moduleData)
-	base.totalModules += 1
 	
-	-- Save to DataStore
-	local DataStoreManager = require(game:GetService("ServerScriptService"):WaitForChild("Knit"):WaitForChild("datastore"):WaitForChild("DataStoreManager"))
-	DataStoreManager:UpdateProfile(player, function(profile)
-		profile.BaseModules = base.modules
-	end)
+	-- Persist immediately
+	SaveModules(player, base)
 	
-	-- Fire events
+	-- Fire client events
 	self.Client:Get("ModulePlaced"):Fire(player, moduleData)
-	self.Client:Get("BaseSynced"):Fire(player, {
-		modules = base.modules,
-		totalModules = base.totalModules,
-		maxModules = PLAYER_MAX_MODULES,
-		location = { X = base.location.X, Y = base.location.Y, Z = base.location.Z },
-	})
+	FireBaseSync(player, base)
 	
+	print(string.format("[BaseBuildingService] %s placed %s (₡%d)", player.Name, moduleType, cost.Credits))
 	return { success = true, module = moduleData }
 end
 
 -- ============================================================
-Module Removal
+-- Module Removal
 -- ============================================================
 
 function BaseBuildingService:RemoveModule(player, moduleId)
@@ -147,22 +154,16 @@ function BaseBuildingService:RemoveModule(player, moduleId)
 	
 	for i, mod in ipairs(base.modules) do
 		if mod.Id == moduleId then
+			local moduleType = mod.Type
 			table.remove(base.modules, i)
-			base.totalModules -= 1
 			
-			-- Save to DataStore
-			local DataStoreManager = require(game:GetService("ServerScriptService"):WaitForChild("Knit"):WaitForChild("datastore"):WaitForChild("DataStoreManager"))
-			DataStoreManager:UpdateProfile(player, function(profile)
-				profile.BaseModules = base.modules
-			end)
+			-- Persist immediately
+			SaveModules(player, base)
 			
-			self.Client:Get("ModuleRemoved"):Fire(player, { id = moduleId })
-			self.Client:Get("BaseSynced"):Fire(player, {
-				modules = base.modules,
-				totalModules = base.totalModules,
-				maxModules = PLAYER_MAX_MODULES,
-			})
+			self.Client:Get("ModuleRemoved"):Fire(player, { id = moduleId, type = moduleType })
+			FireBaseSync(player, base)
 			
+			print(string.format("[BaseBuildingService] %s removed %s", player.Name, moduleType))
 			return { success = true }
 		end
 	end
@@ -180,37 +181,48 @@ function BaseBuildingService:UpgradeModule(player, moduleId)
 	
 	for _, mod in ipairs(base.modules) do
 		if mod.Id == moduleId then
-			if mod.Tier >= 3 then
-				return { success = false, reason = "Maximum tier reached (Tier 3)" }
+			local maxTier = Config.Economy.BaseBuildingCosts.MaxTier or 3
+			if mod.Tier >= maxTier then
+				return { success = false, reason = "Maximum tier reached (Tier " .. maxTier .. ")" }
 			end
 			
-			-- Calculate upgrade cost
-			local upgradeCost = (mod.Tier + 1) * 50 -- 100 for T2, 150 for T3
+			-- Calculate upgrade cost: base price * upgrade multiplier
+			local baseCost = Config.Economy.BaseBuildingCosts[mod.Type]
+			if not baseCost then return { success = false, reason = "Unknown module type" } end
 			
+			local multiplier = Config.Economy.BaseBuildingCosts.UpgradeMultiplier
+			local upgradeMul = (multiplier and multiplier[mod.Tier + 1]) or (mod.Tier + 1)
+			local upgradeCost = math.floor((baseCost.Credits or 100) * upgradeMul)
+			
+			-- Spend Credits
 			local EconomyService = Knit.GetService("EconomyService")
 			if EconomyService then
 				if not EconomyService:SpendCredits(player, upgradeCost) then
-					return { success = false, reason = "Not enough Credits! Need ₡" .. upgradeCost .. " to upgrade" }
+					return { success = false, reason = "Not enough Credits! Need ₡" .. upgradeCost .. " to upgrade to Tier " .. (mod.Tier + 1) }
 				end
 			end
 			
+			-- Apply upgrade
+			local oldTier = mod.Tier
 			mod.Tier += 1
-			mod.Health += 50
+			mod.Health = 100 + (mod.Tier * 25) -- T1=125, T2=150, T3=175
 			
-			-- Save to DataStore
-			local DataStoreManager = require(game:GetService("ServerScriptService"):WaitForChild("Knit"):WaitForChild("datastore"):WaitForChild("DataStoreManager"))
-			DataStoreManager:UpdateProfile(player, function(profile)
-				profile.BaseModules = base.modules
-			end)
+			-- Persist immediately
+			SaveModules(player, base)
 			
-			self.Client:Get("BaseSynced"):Fire(player, {
-				modules = base.modules,
-				totalModules = base.totalModules,
-				maxModules = PLAYER_MAX_MODULES,
-				upgradedModule = { id = mod.Id, tier = mod.Tier },
+			self.Client:Get("ModuleUpgraded"):Fire(player, {
+				id = mod.Id,
+				type = mod.Type,
+				oldTier = oldTier,
+				newTier = mod.Tier,
+				health = mod.Health,
+			})
+			FireBaseSync(player, base, {
+				upgradedModule = { id = mod.Id, type = mod.Type, tier = mod.Tier },
 			})
 			
-			return { success = true, module = mod }
+			print(string.format("[BaseBuildingService] %s upgraded %s to T%d (₡%d)", player.Name, mod.Type, mod.Tier, upgradeCost))
+			return { success = true, module = mod, upgradeCost = upgradeCost }
 		end
 	end
 	
@@ -222,30 +234,29 @@ end
 -- ============================================================
 
 function BaseBuildingService.Client:PlaceModule(player, moduleType, position, orientation)
-	local self = BaseBuildingService
-	return self:PlaceModule(player, moduleType, position, orientation)
+	return BaseBuildingService:PlaceModule(player, moduleType, position, orientation)
 end
 
 function BaseBuildingService.Client:RemoveModule(player, moduleId)
-	local self = BaseBuildingService
-	return self:RemoveModule(player, moduleId)
+	return BaseBuildingService:RemoveModule(player, moduleId)
 end
 
 function BaseBuildingService.Client:UpgradeModule(player, moduleId)
-	local self = BaseBuildingService
-	return self:UpgradeModule(player, moduleId)
+	return BaseBuildingService:UpgradeModule(player, moduleId)
 end
 
 function BaseBuildingService.Client:GetBaseData(player)
-	local self = BaseBuildingService
 	local base = playerBases[player.UserId]
-	if not base then return { modules = {}, totalModules = 0, maxModules = PLAYER_MAX_MODULES } end
-	
+	if not base then
+		return { modules = {}, totalModules = 0, maxModules = Config.Economy.BaseBuildingCosts.MaxModules or 10 }
+	end
+	local maxModules = Config.Economy.BaseBuildingCosts.MaxModules or 10
 	return {
 		modules = base.modules,
-		totalModules = base.totalModules,
-		maxModules = PLAYER_MAX_MODULES,
+		totalModules = #base.modules,
+		maxModules = maxModules,
 		location = { X = base.location.X, Y = base.location.Y, Z = base.location.Z },
+		validTypes = { "Habitat", "Lab" },
 	}
 end
 

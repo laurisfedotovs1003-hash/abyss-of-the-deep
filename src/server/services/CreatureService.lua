@@ -66,6 +66,7 @@ local creatures = {
 }
 
 local activeEncounteredCreatures = {} -- { [playerUserId] = { creature = {}, isShiny, spawnedAt } }
+local lastEncounterTime = {} -- { [playerUserId] = os.time() } — cooldown tracker
 
 -- ============================================================
 -- Initialize
@@ -74,9 +75,30 @@ local activeEncounteredCreatures = {} -- { [playerUserId] = { creature = {}, isS
 function CreatureService:KnitStart()
     print("[CreatureService] Initialized")
     
-    -- Creature encounter check loop (every 5 seconds)
+    -- Creature encounter loop (every 5 seconds)
+    -- Spawns creatures for eligible diving players and despawns expired ones
     while task.wait(5) do
         self:ProcessEncounters()
+        
+        -- Check all diving players for new encounters
+        local OxygenService = Knit.GetService("OxygenService")
+        if not OxygenService then continue end
+        
+        for _, player in ipairs(game:GetService("Players"):GetPlayers()) do
+            -- Only spawn for players who are actively diving
+            local oxygenData = OxygenService:GetPlayerOxygenState(player)
+            if not oxygenData or not oxygenData.isDiving then continue end
+            
+            -- Get their current depth layer
+            local DepthService = Knit.GetService("DepthService")
+            local depth = DepthService and DepthService:GetPlayerDepth(player) or 0
+            local layerIndex = Util.DepthToLayerIndex(depth)
+            
+            -- ~40% chance of encounter per tick (every 5 seconds) for eligible players
+            if math.random() <= 0.4 then
+                self:SpawnCreatureForPlayer(player, layerIndex)
+            end
+        end
     end
 end
 
@@ -95,6 +117,7 @@ function CreatureService:RollEncounter(layerIndex)
     local ConfigLayer = Config.DepthLayers[layerIndex]
     local rarityPool = ConfigLayer.CreatureRarityPool
     
+    -- Filter to rarities available in this depth layer
     local candidates = {}
     for _, creatureDef in ipairs(pool) do
         if table.find(rarityPool, creatureDef.Rarity) then
@@ -106,7 +129,24 @@ function CreatureService:RollEncounter(layerIndex)
         candidates = pool
     end
     
-    local creatureDef = candidates[math.random(#candidates)]
+    -- Weighted random selection using Util.WeightedRandom
+    -- Each creature's weight is its rarity's pool weight (Common=50, Legendary=1)
+    -- This makes Common fish appear much more frequently than rarer ones
+    local weightedTable = {}
+    for _, creatureDef in ipairs(candidates) do
+        local rarityConfig = Config.CreatureRarity[creatureDef.Rarity]
+        table.insert(weightedTable, {
+            value = creatureDef,
+            weight = rarityConfig and rarityConfig.Weight or 1,
+        })
+    end
+    
+    local creatureDef = Util.WeightedRandom(weightedTable)
+    if not creatureDef then
+        creatureDef = candidates[math.random(#candidates)]
+    end
+    
+    -- Shiny check (~1% chance)
     local isShiny = math.random() <= 0.01
     
     return creatureDef, isShiny
@@ -117,12 +157,15 @@ end
 -- ============================================================
 
 function CreatureService:ProcessEncounters()
+    local now = os.time()
     for userId, encounter in pairs(activeEncounteredCreatures) do
-        if os.time() - encounter.spawnedAt > 30 then
+        -- De-spawn creatures that have been active too long (30 seconds)
+        if now - encounter.spawnedAt > 30 then
             local player = game:GetService("Players"):GetPlayerByUserId(userId)
             if player then
                 self.Client:Get("CreatureDespawned"):Fire(player, {
                     creatureId = encounter.creature.Id,
+                    reason = "timeout",
                 })
             end
             activeEncounteredCreatures[userId] = nil
@@ -130,9 +173,39 @@ function CreatureService:ProcessEncounters()
     end
 end
 
+-- Check if a player is eligible for a new encounter (respects cooldown)
+function CreatureService:CanSpawnForPlayer(player, layerIndex)
+    local userId = player.UserId
+    
+    -- Already has an active encounter
+    if activeEncounteredCreatures[userId] then
+        return false
+    end
+    
+    -- Enforce 4-second cooldown between encounters for smooth pacing
+    local lastTime = lastEncounterTime[userId] or 0
+    if os.time() - lastTime < 4 then
+        return false
+    end
+    
+    -- Verify player is actually in the right depth layer
+    local DepthService = Knit.GetService("DepthService")
+    local playerDepth = DepthService and DepthService:GetPlayerDepth(player) or 0
+    local currentLayer = Util.DepthToLayerIndex(playerDepth)
+    
+    return currentLayer == layerIndex
+end
+
 function CreatureService:SpawnCreatureForPlayer(player, layerIndex)
+    if not self:CanSpawnForPlayer(player, layerIndex) then
+        return false
+    end
+    
     local creatureDef, isShiny = self:RollEncounter(layerIndex)
-    if not creatureDef then return end
+    if not creatureDef then return false end
+    
+    local userId = player.UserId
+    lastEncounterTime[userId] = os.time()
     
     local rarityConfig = Config.CreatureRarity[creatureDef.Rarity]
     
@@ -142,6 +215,8 @@ function CreatureService:SpawnCreatureForPlayer(player, layerIndex)
         spawnedAt = os.time(),
     }
     
+    -- Rich spawn data with timing info for smooth UI animations
+    local encounterDuration = 30 -- seconds until despawn
     self.Client:Get("CreatureSpawned"):Fire(player, {
         id = creatureDef.Id,
         displayName = creatureDef.DisplayName,
@@ -151,7 +226,16 @@ function CreatureService:SpawnCreatureForPlayer(player, layerIndex)
         weight = creatureDef.Weight,
         size = creatureDef.Size,
         rarityWeight = rarityConfig.Weight,
+        -- Timing info for UI
+        encounterDuration = encounterDuration,
+        spawnedAt = os.time(),
+        expiresAt = os.time() + encounterDuration,
+        -- Depth layer context
+        depthLayer = layerIndex,
+        depthLayerName = Config.DepthLayers[layerIndex].Name,
     })
+    
+    return true
 end
 
 -- ============================================================
@@ -169,9 +253,13 @@ function CreatureService.Client:RequestCatch(player)
     local creatureDef = encounter.creature
     local rarityConfig = Config.CreatureRarity[creatureDef.Rarity]
     
-    -- Skill-based catch: ~60% base chance, modified by rarity
+    -- Catch chance: base 60% modified by rarity catch modifier
+    -- Rarity catch modifiers (from docs):
+    --   Common: 1.0x (60%), Uncommon: 0.5x (30%), Rare: 0.25x (15%),
+    --   Epic: 0.1x (6%), Legendary: 0.03x (1.8%)
+    -- Formula: catchModifier = rarityWeight / 50 (normalized to Common=50)
     local baseCatchChance = 0.6
-    local catchModifier = 1 / (rarityConfig.Weight / 15)
+    local catchModifier = rarityConfig.Weight / 50
     local catchChance = baseCatchChance * catchModifier
     
     -- Check for active catch rate boosts from inventory

@@ -8,6 +8,3 @@ realm = "shared"
 [dependencies]
 Knit = "sleitnick/knit@1.4.7"
 ProfileService = "madstudios/profile-service@2.0.0"
-
-[server-dependencies]
-DataStore2 = "kampfkarren/data-store-2@3.2.0"
