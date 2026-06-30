@@ -95,7 +95,14 @@ function CreatureService:KnitStart()
             local layerIndex = Util.DepthToLayerIndex(depth)
             
             -- ~40% chance of encounter per tick (every 5 seconds) for eligible players
-            if math.random() <= 0.4 then
+            -- Modified by anomaly spawn rate multiplier
+            local encounterChance = 0.4
+            local AnomalyService = Knit.GetService("AnomalyService")
+            if AnomalyService then
+                encounterChance = encounterChance * AnomalyService:GetSpawnRateMultiplier()
+            end
+            
+            if math.random() <= encounterChance then
                 self:SpawnCreatureForPlayer(player, layerIndex)
             end
         end
@@ -131,13 +138,21 @@ function CreatureService:RollEncounter(layerIndex)
     
     -- Weighted random selection using Util.WeightedRandom
     -- Each creature's weight is its rarity's pool weight (Common=50, Legendary=1)
+    -- Modified by active anomaly rarity multipliers
     -- This makes Common fish appear much more frequently than rarer ones
+    local AnomalyService = Knit.GetService("AnomalyService")
     local weightedTable = {}
     for _, creatureDef in ipairs(candidates) do
         local rarityConfig = Config.CreatureRarity[creatureDef.Rarity]
+        local baseWeight = rarityConfig and rarityConfig.Weight or 1
+        -- Apply anomaly rarity multiplier if active
+        local anomalyMult = 1.0
+        if AnomalyService then
+            anomalyMult = AnomalyService:GetRarityWeightMultiplier(creatureDef.Rarity)
+        end
         table.insert(weightedTable, {
             value = creatureDef,
-            weight = rarityConfig and rarityConfig.Weight or 1,
+            weight = baseWeight * anomalyMult,
         })
     end
     
@@ -217,6 +232,12 @@ function CreatureService:SpawnCreatureForPlayer(player, layerIndex)
     
     -- Rich spawn data with timing info for smooth UI animations
     local encounterDuration = 30 -- seconds until despawn
+    local isAnomalyActive = false
+    local AnomalyService = Knit.GetService("AnomalyService")
+    if AnomalyService then
+        isAnomalyActive = AnomalyService:IsAnomalyActive()
+    end
+    
     self.Client:Get("CreatureSpawned"):Fire(player, {
         id = creatureDef.Id,
         displayName = creatureDef.DisplayName,
@@ -233,6 +254,8 @@ function CreatureService:SpawnCreatureForPlayer(player, layerIndex)
         -- Depth layer context
         depthLayer = layerIndex,
         depthLayerName = Config.DepthLayers[layerIndex].Name,
+        -- Anomaly context (UI can show different visual)
+        isAnomalySpawn = isAnomalyActive,
     })
     
     return true
@@ -262,6 +285,12 @@ function CreatureService.Client:RequestCatch(player)
     local catchModifier = rarityConfig.Weight / 50
     local catchChance = baseCatchChance * catchModifier
     
+    -- Apply anomaly catch chance modifier
+    local AnomalyService = Knit.GetService("AnomalyService")
+    if AnomalyService then
+        catchChance = catchChance * AnomalyService:GetCatchChanceMultiplier()
+    end
+    
     -- Check for active catch rate boosts from inventory
     local EconomyService = Knit.GetService("EconomyService")
     if EconomyService then
@@ -288,6 +317,12 @@ function CreatureService.Client:RequestCatch(player)
         
         local xpReward = rarityConfig.XPMultiplier * Config.Economy.XPPerCreatureCaptured
         local rpReward = 0
+        
+        -- Apply anomaly XP and credit multipliers
+        if AnomalyService then
+            xpReward = xpReward * AnomalyService:GetXPMultiplier()
+            sellPrice = sellPrice * AnomalyService:GetCreditMultiplier()
+        end
         
         -- Award XP and Credits through EconomyService
         if EconomyService then

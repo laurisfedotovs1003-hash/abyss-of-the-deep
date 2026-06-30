@@ -402,84 +402,61 @@ function UIController:BuildHUD()
     cachedHUD.depthLimit = depthLimitText
 
     -- ================================================================
-    -- 5. BOTTOM-LEFT: Currency Display
+    -- 5. BOTTOM-LEFT: Currency & Resources Display
     -- ================================================================
     local currencyFrame = New("Frame", {
         Name = "CurrencyDisplay",
-        Size = UDim2.fromOffset(180, 56),
+        Size = UDim2.fromOffset(180, 108),
         Position = UDim2.fromOffset(16, 1),
         AnchorPoint = Vector2.new(0, 1),
         BackgroundTransparency = 1,
         Parent = hudContainer,
     })
-    currencyFrame.Position = UDim2.fromOffset(16, -104)
+    currencyFrame.Position = UDim2.fromOffset(16, -156)
 
-    -- Depth Credits (gold)
-    local credsFrame = New("Frame", {
-        Name = "DepthCredits",
-        Size = UDim2.fromOffset(180, 24),
-        Position = UDim2.fromScale(0, 0),
-        BackgroundColor3 = UIStyles.Colors.CardBG,
-        BackgroundTransparency = 0.4,
-        Parent = currencyFrame,
-    })
-    NewCorner(6).Parent = credsFrame
-    NewStroke(UIStyles.Colors.Gold, 0.8, 1).Parent = credsFrame
+    -- Helper: build a currency row
+    local function BuildCurrencyRow(name, icon, color, yOffset, cacheKey)
+        local row = New("Frame", {
+            Name = name,
+            Size = UDim2.fromOffset(180, 23),
+            Position = UDim2.fromOffset(0, yOffset),
+            BackgroundColor3 = UIStyles.Colors.CardBG,
+            BackgroundTransparency = 0.4,
+            Parent = currencyFrame,
+        })
+        NewCorner(6).Parent = row
+        NewStroke(color, 0.8, 1).Parent = row
 
-    local credIcon = UIComponents.CreateTextLabel({
-        Name = "Icon",
-        Text = "🪙",
-        Size = UDim2.fromOffset(24, 24),
-        Color = UIStyles.Colors.Gold,
-        TextSize = 16,
-        TextXAlignment = Enum.TextXAlignment.Center,
-        Parent = credsFrame,
-    })
-    local credValue = UIComponents.CreateTextLabel({
-        Name = "Value",
-        Text = "50",
-        Size = UDim2.new(1, -28, 1, 0),
-        Position = UDim2.fromOffset(26, 0),
-        Color = UIStyles.Colors.Gold,
-        Font = UIStyles.Fonts.Number,
-        TextSize = UIStyles.FontSizes.HUDSmall,
-        Parent = credsFrame,
-    })
-    cachedHUD.credits = credValue
+        local iconLabel = UIComponents.CreateTextLabel({
+            Name = "Icon",
+            Text = icon,
+            Size = UDim2.fromOffset(22, 23),
+            Color = color,
+            TextSize = 14,
+            TextXAlignment = Enum.TextXAlignment.Center,
+            Parent = row,
+        })
+        local value = UIComponents.CreateTextLabel({
+            Name = "Value",
+            Text = "0",
+            Size = UDim2.new(1, -26, 1, 0),
+            Position = UDim2.fromOffset(26, 0),
+            Color = color,
+            Font = UIStyles.Fonts.Number,
+            TextSize = UIStyles.FontSizes.HUDSmall,
+            Parent = row,
+        })
+        cachedHUD[cacheKey] = value
+    end
 
-    -- Research Points (purple)
-    local rpFrame = New("Frame", {
-        Name = "ResearchPoints",
-        Size = UDim2.fromOffset(180, 24),
-        Position = UDim2.fromScale(0, 0),
-        BackgroundColor3 = UIStyles.Colors.CardBG,
-        BackgroundTransparency = 0.4,
-        Parent = currencyFrame,
-    })
-    rpFrame.Position = UDim2.fromOffset(0, 28)
-    NewCorner(6).Parent = rpFrame
-    NewStroke(UIStyles.Colors.DeepPurple, 0.8, 1).Parent = rpFrame
-
-    local rpIcon = UIComponents.CreateTextLabel({
-        Name = "Icon",
-        Text = "🔬",
-        Size = UDim2.fromOffset(24, 24),
-        Color = UIStyles.Colors.DeepPurple,
-        TextSize = 16,
-        TextXAlignment = Enum.TextXAlignment.Center,
-        Parent = rpFrame,
-    })
-    local rpValue = UIComponents.CreateTextLabel({
-        Name = "Value",
-        Text = "0",
-        Size = UDim2.new(1, -28, 1, 0),
-        Position = UDim2.fromOffset(26, 0),
-        Color = UIStyles.Colors.DeepPurple,
-        Font = UIStyles.Fonts.Number,
-        TextSize = UIStyles.FontSizes.HUDSmall,
-        Parent = rpFrame,
-    })
-    cachedHUD.researchPoints = rpValue
+    -- Row 0: Depth Credits (gold)
+    BuildCurrencyRow("DepthCredits", "🪙", UIStyles.Colors.Gold, 0, "credits")
+    -- Row 1: Research Points (purple)
+    BuildCurrencyRow("ResearchPoints", "🔬", UIStyles.Colors.DeepPurple, 26, "researchPoints")
+    -- Row 2: Scrap (green)
+    BuildCurrencyRow("Scrap", "🔩", UIStyles.Colors.BioGreen, 52, "scrap")
+    -- Row 3: Crystal (cyan-blue)
+    BuildCurrencyRow("Crystal", "💎", UIStyles.Colors.Cyan, 78, "crystal")
 
     -- ================================================================
     -- 6. BOTTOM-RIGHT: Action Buttons (Shop, Inventory, Journal)
@@ -555,7 +532,8 @@ function UIController:BuildHUD()
                     DepthService.Client:Get("SurfacePlayer"):Fire()
                 end
                 isDiving = false
-                primaryBtn:FindFirstChild("ActionLabel", true).Text = "DIVE"
+                local label = primaryBtn:FindFirstChild("Label", true)
+                if label then label.Text = "DIVE" end
                 cachedHUD.primaryBtn = primaryBtn
             else
                 -- Dive
@@ -729,10 +707,21 @@ end
 function UIController:UpdateEconomyDisplay(data)
     if not data then return end
 
-    local credits = data.currency or data.credits or 0
-    local researchPoints = data.researchPoints or data.rp or 0
-    local xp = data.experience or data.xp or 0
-    local level = data.level or 1
+    -- EconomyService sends capitalized field names: Credits, ResearchPoints, XP, Level
+    local credits = data.Credits or data.credits or data.currency or 0
+    local researchPoints = data.ResearchPoints or data.researchPoints or data.rp or 0
+    local xp = data.XP or data.experience or data.xp or 0
+    local level = data.Level or data.level or 1
+    local xpNeeded = data.XPNeeded or 0
+
+    -- Scrap and Crystal are stored in the inventory or could come as separate fields
+    local scrap = data.Scrap or 0
+    local crystal = data.Crystal or 0
+    -- Also check inventory for scrap/crystal counts
+    if data.Inventory then
+        scrap = data.Inventory.Scrap or data.Inventory.scrap or scrap
+        crystal = data.Inventory.Crystal or data.Inventory.crystal or crystal
+    end
 
     -- Format numbers with commas
     local function formatNum(n)
@@ -751,6 +740,18 @@ function UIController:UpdateEconomyDisplay(data)
 
     if cachedHUD.researchPoints then
         cachedHUD.researchPoints.Text = formatNum(researchPoints)
+    end
+
+    -- Update Scrap display
+    if cachedHUD.scrap then
+        cachedHUD.scrap.Text = formatNum(scrap)
+        -- Pulse green briefly on change
+        local currentText = cachedHUD.scrap.Text
+    end
+
+    -- Update Crystal display
+    if cachedHUD.crystal then
+        cachedHUD.crystal.Text = formatNum(crystal)
     end
 end
 
@@ -1234,6 +1235,26 @@ function UIController:ShowCollection()
     -- Update canvas size for grid
     local totalRows = math.ceil(#sampleCreatures / cols)
     grid.CanvasSize = UDim2.fromOffset(0, totalRows * (cardHeight + 8) + 12)
+
+    -- Add _update handler for real-time collection data from CollectionService
+    -- CollectionService sends: { totalUnique, totalPossible, completion, isNewDiscovery }
+    container._update = function(data)
+        if not data then return end
+        local totalUnique = data.totalUnique or 0
+        local totalPossible = data.totalPossible or 1
+        local completion = (totalPossible > 0 and math.floor((totalUnique / totalPossible) * 100)) or 0
+        local isNew = data.isNewDiscovery or false
+
+        -- Update title to show progress
+        if titleLabel then
+            titleLabel.Text = "🎒 COLLECTION (" .. tostring(totalUnique) .. "/" .. tostring(totalPossible) .. ")"
+        end
+
+        -- Show toast for new discovery
+        if isNew then
+            self:ShowGameMessage("🌟 New discovery added to collection!")
+        end
+    end
 end
 
 -- ================================================================

@@ -180,35 +180,88 @@ end
 -- ============================================================
 
 function DepthService:CompleteDive(player)
-    local data = playerDepths[player.UserId]
-    if not data then return end
-    
-    if data.depth <= 0 then return end -- No dive to complete
-    
-    local EconomyService = Knit.GetService("EconomyService")
-    if not EconomyService then return end
-    
-    -- Dive completion bonus
-    local depthBonus = math.floor(data.maxDepthReached * 0.05) -- 5% of best depth
-    EconomyService:AddCredits(player, Config.Economy.CreditsPerDiveComplete + depthBonus)
-    
-    -- Research Points for significant dives
-    if data.maxDepthReached >= 1000 then
-        -- First major depth milestones award RP
-        local milestones = { 200, 1000, 4000, 6000, 11000 }
-        for _, ms in ipairs(milestones) do
-            if data.maxDepthReached >= ms then
-                -- Checked via DataStore
+        local data = playerDepths[player.UserId]
+        if not data then return end
+
+        if data.depth <= 0 then return end -- No dive to complete
+
+        local EconomyService = Knit.GetService("EconomyService")
+        if not EconomyService then return end
+
+        -- Use Config.DiveBonuses to determine bonus based on max depth reached
+        local diveBonus = Config.Economy.CreditsPerDiveComplete or 15
+        local diveLabel = "Dive Complete"
+        for _, bonus in ipairs(Config.DiveBonuses or {}) do
+            if data.maxDepthReached >= bonus.minDepth and data.maxDepthReached <= bonus.maxDepth then
+                diveBonus = bonus.bonus
+                diveLabel = bonus.label
+                break
+            end
+        end
+
+        EconomyService:AddCredits(player, diveBonus)
+
+        -- Award resources for dive (Scrap + Crystal based on depth)
+        local scrapGain = math.floor(data.maxDepthReached * (Config.Resources.Scrap.PerDepthMeter or 0.05))
+        local crystalGain = math.floor(data.maxDepthReached * (Config.Resources.Crystal.PerDepthMeter or 0.01))
+        if scrapGain > 0 then EconomyService:AddResource(player, "Scrap", scrapGain) end
+        if crystalGain > 0 then EconomyService:AddResource(player, "Crystal", crystalGain) end
+
+        -- Award one-time depth milestone bonuses (checked via DataStore)
+        self:AwardDepthMilestones(player, data)
+
+        -- Notify player about dive reward
+        if diveBonus > 0 or scrapGain > 0 or crystalGain > 0 then
+            self.Client:Get("GetDepthData"):Fire(player, {
+                diveComplete = true,
+                bonus = diveBonus,
+                label = diveLabel,
+                scrapEarned = scrapGain,
+                crystalEarned = crystalGain,
+            })
+        end
+
+        -- Reset surface
+        data.depth = 0
+        data.layerIndex = 1
+
+        self:FireDepthUpdate(player, data)
+    end
+
+    function DepthService:AwardDepthMilestones(player, data)
+        local DataStoreManager = require(game:GetService("ServerScriptService"):WaitForChild("Knit"):WaitForChild("datastore"):WaitForChild("DataStoreManager"))
+        local EconomyService = Knit.GetService("EconomyService")
+        if not EconomyService then return end
+
+        for _, ms in ipairs(Config.DepthMilestones or {}) do
+            if data.maxDepthReached >= ms.depth then
+                -- Check if already awarded this milestone
+                if not DataStoreManager:HasDiscoveredZone(player, ms.depth) then
+                    -- Mark as awarded (use depth value as unique key)
+                    DataStoreManager:MarkZoneDiscovered(player, ms.depth)
+
+                    -- Award Credits
+                    if ms.credits and ms.credits > 0 then
+                        EconomyService:AddCredits(player, ms.credits)
+                    end
+
+                    -- Award Research Points
+                    if ms.rpReward and ms.rpReward > 0 then
+                        EconomyService:AddResearchPoints(player, ms.rpReward)
+                    end
+
+                    -- Notify player of milestone
+                    self.Client:Get("GetLayerInfo"):Fire(player, {
+                        milestoneReached = true,
+                        depth = ms.depth,
+                        title = ms.title,
+                        creditsAwarded = ms.credits or 0,
+                        rpAwarded = ms.rpReward or 0,
+                    })
+                end
             end
         end
     end
-    
-    -- Reset surface
-    data.depth = 0
-    data.layerIndex = 1
-    
-    self:FireDepthUpdate(player, data)
-end
 
 -- ============================================================
 -- Gear System

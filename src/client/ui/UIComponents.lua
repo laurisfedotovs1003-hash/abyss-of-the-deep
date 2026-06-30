@@ -459,7 +459,7 @@ function UIComponents.CreateShopItemCard(props)
         local btn = UIComponents.CreateButton({
             Name = "ActionBtn",
             Text = btnText,
-            Size = UDim2.fromOffset(80, 34),
+            Size = UDim2.fromOffset(90, 44),
             Position = UDim2.new(1, -12, 0.5, 0),
             AnchorPoint = Vector2.new(1, 0.5),
             Color = state == "locked" and UIStyles.Colors.SurfaceDark or UIStyles.Colors.Cyan,
@@ -481,10 +481,13 @@ end
 
 function UIComponents.CreateCreatureCard(props)
     local rarityColor = UIStyles.RarityToColor(props.Rarity or "Common")
+    local cardSize = props.Size or 160
+    local cardHeight = cardSize + 24 -- extra room for text labels
+    local iconAreaHeight = cardSize * 0.5
 
     local card = New("Frame", {
         Name = "Creature_" .. (props.Name or "Creature"),
-        Size = UDim2.fromOffset(props.Size or 160, (props.Size or 160) + 20),
+        Size = UDim2.fromOffset(cardSize, cardHeight),
         BackgroundColor3 = UIStyles.Colors.Elevated,
         BackgroundTransparency = 0.2,
         ClipsDescendants = true,
@@ -493,19 +496,17 @@ function UIComponents.CreateCreatureCard(props)
     NewCorner(UIStyles.Spacing.CardRadius).Parent = card
     NewStroke(rarityColor, 0.5, 2).Parent = card
 
-    -- Icon
-    local iconFrame = New("Frame", {
-        Size = UDim2.fromScale(1, 0.5),
-        BackgroundTransparency = 1,
-        Parent = card,
-    })
+    -- Icon centered in upper half of card
     local icon = UIComponents.CreateTextLabel({
+        Name = "Icon",
         Text = props.Icon or "🐟",
-        Size = UDim2.fromScale(1, 1),
-        TextSize = (props.Size or 160) * 0.3,
+        Size = UDim2.fromOffset(cardSize - 16, iconAreaHeight - 8),
+        Position = UDim2.fromScale(0.5, 0.45),
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        TextSize = math.min(cardSize * 0.35, 48),
         TextXAlignment = Enum.TextXAlignment.Center,
         TextYAlignment = Enum.TextYAlignment.Center,
-        Parent = iconFrame,
+        Parent = card,
     })
 
     -- Name
@@ -513,7 +514,7 @@ function UIComponents.CreateCreatureCard(props)
         Name = "Name",
         Text = props.Name or "Unknown",
         Size = UDim2.new(1, -12, 0, 20),
-        Position = UDim2.fromOffset(6, iconFrame.Size.Y.Offset + 4),
+        Position = UDim2.fromOffset(6, iconAreaHeight - 2),
         Color = UIStyles.Colors.TextPrimary,
         Font = UIStyles.Fonts.Display,
         TextSize = UIStyles.FontSizes.Small,
@@ -525,25 +526,23 @@ function UIComponents.CreateCreatureCard(props)
         Name = "Meta",
         Text = (props.Rarity or "Common") .. " · " .. (props.Zone or ""),
         Size = UDim2.new(1, -12, 0, 16),
-        Position = UDim2.fromOffset(6, 0),
+        Position = UDim2.fromOffset(6, iconAreaHeight + 18),
         Color = rarityColor,
         TextSize = UIStyles.FontSizes.Tiny,
         Parent = card,
     })
-    metaLabel.Position = UDim2.fromOffset(6, (props.Size or 160) * 0.5 + 24)
 
     -- Price
     local priceLabel = UIComponents.CreateTextLabel({
         Name = "Price",
         Text = "★ " .. tostring(props.SellPrice or 0),
         Size = UDim2.new(1, -12, 0, 16),
-        Position = UDim2.fromOffset(6, 0),
+        Position = UDim2.fromOffset(6, iconAreaHeight + 36),
         Color = UIStyles.Colors.Gold,
         Font = UIStyles.Fonts.Display,
         TextSize = UIStyles.FontSizes.Small,
         Parent = card,
     })
-    priceLabel.Position = UDim2.fromOffset(6, (props.Size or 160) * 0.5 + 44)
 
     return card
 end
