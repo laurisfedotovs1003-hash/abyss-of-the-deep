@@ -159,13 +159,32 @@ function UIController:RegisterServiceListeners()
     end
 
     -- Collection updates
-    local CollectionService = Knit.GetService("CollectionService")
-    if CollectionService then
-        CollectionService.Client:Get("CollectionUpdated"):Connect(function(data)
-            self:UpdateCollectionDisplay(data)
-        end)
-    end
-end
+            local CollectionService = Knit.GetService("CollectionService")
+            if CollectionService then
+                CollectionService.Client:Get("CollectionUpdated"):Connect(function(data)
+                    self:UpdateCollectionDisplay(data)
+                end)
+            end
+
+            -- Anomaly / Echo Event listeners
+            local AnomalyService = Knit.GetService("AnomalyService")
+            if AnomalyService then
+                -- Warning — show countdown banner 10s before event
+                AnomalyService.Client:Get("AnomalyWarning"):Connect(function(data)
+                    self:ShowAnomalyWarning(data)
+                end)
+
+                -- Anomaly started — show active banner with lighting shift
+                AnomalyService.Client:Get("AnomalyStarted"):Connect(function(data)
+                    self:ShowAnomalyActive(data)
+                end)
+
+                -- Anomaly ended — clear banner, restore normal UI
+                AnomalyService.Client:Get("AnomalyEnded"):Connect(function(data)
+                    self:ShowAnomalyEnded(data)
+                end)
+            end
+        end
 
 -- ============================================================
 -- SCREEN MANAGEMENT
@@ -921,7 +940,7 @@ function UIController:ShowShop()
         local tab = UIComponents.CreateButton({
             Name = "Tab_" .. name,
             Text = name,
-            Size = UDim2.fromOffset(0, 32),
+            Size = UDim2.fromOffset(0, 36),
             Position = UDim2.fromScale(0, 0),
             Color = isSelected and UIStyles.Colors.Cyan or UIStyles.Colors.SurfaceDark,
             Transparency = isSelected and 0.8 or 0.5,
@@ -939,7 +958,7 @@ function UIController:ShowShop()
                 for i, catName in ipairs(categories) do
                     local newTab = BuildCategoryTab(i, catName)
                     newTab.Position = UDim2.fromOffset((i - 1) * 120, 4)
-                    newTab.Size = UDim2.fromOffset(110, 32)
+                    newTab.Size = UDim2.fromOffset(110, 36)
                     newTab.Parent = tabsFrame
                 end
                 -- Refresh items
@@ -952,7 +971,7 @@ function UIController:ShowShop()
     -- Build tabs
     for i, catName in ipairs(categories) do
         local tab = BuildCategoryTab(i, catName)
-        tab.Size = UDim2.fromOffset(110, 32)
+        tab.Size = UDim2.fromOffset(110, 36)
         tab.Position = UDim2.fromOffset((i - 1) * 120, 4)
         tab.Parent = tabsFrame
     end
@@ -1161,7 +1180,7 @@ function UIController:ShowCollection()
         local filterTab = UIComponents.CreateButton({
             Name = "Filter_" .. filterName,
             Text = filterName,
-            Size = UDim2.fromOffset(0, 30),
+            Size = UDim2.fromOffset(80, 36),
             Position = UDim2.fromOffset((i - 1) * 90, 0),
             Color = i == 1 and UIStyles.Colors.Cyan or UIStyles.Colors.SurfaceDark,
             Transparency = i == 1 and 0.8 or 0.5,
@@ -1172,7 +1191,7 @@ function UIController:ShowCollection()
             StrokeColor = i == 1 and UIStyles.Colors.Cyan or UIStyles.Colors.Border,
             Parent = filtersFrame,
         })
-        filterTab.Size = UDim2.fromOffset(80, 30)
+        filterTab.Size = UDim2.fromOffset(80, 36)
     end
 
     -- Grid (Scrollable)
@@ -1473,10 +1492,181 @@ function UIController:ShowBaseEditor()
 end
 
 -- ================================================================
+-- ANOMALY / ECHO EVENT UI
+-- ================================================================
+
+local activeAnomalyBanner = nil
+
+function UIController:ShowAnomalyWarning(data)
+    if not data then return end
+    
+    -- Display warning banner: "⚠️ Corrupted Depths incoming in 10s!"
+    local warningText = string.format("⚠️ %s incoming!", data.displayName or "Echo Event")
+    self:ShowGameMessage(warningText)
+    
+    -- Create a pulsing warning banner at the top of the screen
+    local container = CreateScreenContainer("AnomalyWarning")
+    container.DisplayOrder = 20  -- Above other UI
+    container.Name = "AnomalyWarning"
+    
+    local banner = New("Frame", {
+        Name = "AnomalyWarningBanner",
+        Size = UDim2.new(1, 0, 0, 0),
+        Position = UDim2.fromScale(0, 0),
+        BackgroundColor3 = Color3.fromRGB(255, 100, 0),
+        BackgroundTransparency = 0.3,
+        Parent = container,
+    })
+    
+    local label = UIComponents.CreateTextLabel({
+        Name = "WarningLabel",
+        Text = warningText,
+        Size = UDim2.fromScale(1, 0),
+        Height = UDim.new(0, 50),
+        Color = Color3.fromRGB(255, 255, 255),
+        Font = UIStyles.Fonts.Display,
+        TextSize = 22,
+        TextStrokeTransparency = 0.3,
+        Parent = banner,
+    })
+    
+    -- Animate banner sliding in
+    banner.Size = UDim2.new(1, 0, 0, 0)
+    banner:TweenSize(
+        UDim2.new(1, 0, 0, 50),
+        Enum.EasingDirection.Out,
+        Enum.EasingStyle.Quart,
+        0.5,
+        true
+    )
+    
+    activeAnomalyBanner = container
+    
+    -- Auto-destroy warning when anomaly starts (replaced by active banner)
+    task.delay(data.startsIn or 10, function()
+        if container and container.Parent then
+            container:Destroy()
+        end
+    end)
+end
+
+function UIController:ShowAnomalyActive(data)
+    if not data then return end
+    
+    -- Clear warning banner if still visible
+    if activeAnomalyBanner and activeAnomalyBanner.Parent then
+        activeAnomalyBanner:Destroy()
+        activeAnomalyBanner = nil
+    end
+    
+    -- Show active anomaly banner
+    local desc = data.description or ""
+    local duration = data.duration or 60
+    local endsAt = data.endsAt or (os.time() + duration)
+    
+    local container = CreateScreenContainer("AnomalyActive")
+    container.DisplayOrder = 19
+    container.Name = "AnomalyActive"
+    
+    -- Top banner with color based on anomaly priority
+    local priorityColors = {
+        [1] = Color3.fromRGB(180, 30, 30),    -- Corrupted: dark red
+        [2] = Color3.fromRGB(200, 170, 50),   -- Enchanted: gold
+        [3] = Color3.fromRGB(150, 0, 200),    -- Bloom: purple
+        [4] = Color3.fromRGB(10, 10, 60),     -- Surge: dark blue
+        [5] = Color3.fromRGB(0, 180, 220),    -- Migration: cyan
+    }
+    local bannerColor = priorityColors[data.priority] or Color3.fromRGB(100, 100, 100)
+    
+    local banner = New("Frame", {
+        Name = "AnomalyActiveBanner",
+        Size = UDim2.new(1, 0, 0, 0),
+        Position = UDim2.fromScale(0, 0),
+        BackgroundColor3 = bannerColor,
+        BackgroundTransparency = 0.2,
+        Parent = container,
+    })
+    
+    -- Event name
+    local nameLabel = UIComponents.CreateTextLabel({
+        Name = "AnomalyName",
+        Text = "⚡ " .. (data.displayName or "Echo Event") .. " ⚡",
+        Size = UDim2.fromScale(1, 0),
+        Height = UDim.new(0, 28),
+        Position = UDim2.fromOffset(0, 6),
+        Color = Color3.fromRGB(255, 255, 255),
+        Font = UIStyles.Fonts.Display,
+        TextSize = 20,
+        TextStrokeTransparency = 0.2,
+        Parent = banner,
+    })
+    
+    -- Duration timer
+    local timerLabel = UIComponents.CreateTextLabel({
+        Name = "AnomalyTimer",
+        Text = tostring(duration) .. "s remaining",
+        Size = UDim2.fromScale(1, 0),
+        Height = UDim.new(0, 20),
+        Position = UDim2.fromOffset(0, 34),
+        Color = Color3.fromRGB(200, 200, 200),
+        Font = UIStyles.Fonts.Number,
+        TextSize = 14,
+        Parent = banner,
+    })
+    
+    -- Animate in
+    banner.Size = UDim2.new(1, 0, 0, 0)
+    banner:TweenSize(
+        UDim2.new(1, 0, 0, 56),
+        Enum.EasingDirection.Out,
+        Enum.EasingStyle.Quart,
+        0.5,
+        true
+    )
+    
+    -- Update timer every second
+    local heartbeat
+    heartbeat = RunService.Heartbeat:Connect(function()
+        if not container or not container.Parent then
+            heartbeat:Disconnect()
+            return
+        end
+        local remaining = math.max(0, endsAt - os.time())
+        if timerLabel and timerLabel.Parent then
+            timerLabel.Text = string.format("%ds remaining — %s", remaining, desc)
+        end
+        if remaining <= 0 and heartbeat then
+            heartbeat:Disconnect()
+        end
+    end)
+    
+    activeAnomalyBanner = container
+end
+
+function UIController:ShowAnomalyEnded(data)
+    if not data then return end
+    
+    -- Clear active banner
+    if activeAnomalyBanner and activeAnomalyBanner.Parent then
+        activeAnomalyBanner:Destroy()
+        activeAnomalyBanner = nil
+    end
+    
+    -- Show end message
+    self:ShowGameMessage(string.format("✅ %s has passed. The depths return to normal.", data.displayName or "Echo Event"))
+end
+
+-- ================================================================
 -- Cleanup
 -- ================================================================
 
 function UIController:KnitStop()
+    -- Clean up anomaly banners
+    if activeAnomalyBanner and activeAnomalyBanner.Parent then
+        activeAnomalyBanner:Destroy()
+        activeAnomalyBanner = nil
+    end
+
     -- Clean up all GUI instances
     for _, gui in ipairs(playerGui:GetChildren()) do
         if gui.Name == "AbyssUI" or gui.Name == "ShopUI" or gui.Name == "CollectionUI" then

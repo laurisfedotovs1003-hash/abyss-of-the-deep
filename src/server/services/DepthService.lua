@@ -15,6 +15,7 @@ local DepthService = Knit.CreateService {
         GetLayerInfo = Knit.CreateSignal(),
         GetGearInfo = Knit.CreateSignal(),
         UpgradeGearRequest = Knit.CreateSignal(),
+        SurfacePlayer = Knit.CreateSignal(),
         DepthXPUpdate = Knit.CreateSignal(), -- XP earned from exploration
     }
 }
@@ -415,16 +416,26 @@ function DepthService.Client:GetGearInfo(player)
 end
 
 function DepthService.Client:UpgradeGearRequest(player)
-    local self = DepthService
-    -- Route through EconomyService which handles the purchase then calls this
-    local EconomyService = Knit.GetService("EconomyService")
-    if EconomyService then
-        local data = playerDepths[player.UserId]
-        if data then
-            return EconomyService:PurchaseGear(player, data.gearTier + 1)
+        local self = DepthService
+        -- Route through EconomyService which handles the purchase then calls this
+        local EconomyService = Knit.GetService("EconomyService")
+        if EconomyService then
+            local data = playerDepths[player.UserId]
+            if data then
+                return EconomyService:PurchaseGear(player, data.gearTier + 1)
+            end
         end
+        return { success = false, reason = "System unavailable" }
     end
-    return { success = false, reason = "System unavailable" }
+
+    function DepthService.Client:SurfacePlayer(player)
+        local self = DepthService
+        self:SurfacePlayer(player)
+        return { success = true }
+    end
+
+function DepthService.Client:ReportDepth(player, depth)
+    DepthService:UpdatePlayerDepth(player, depth)
 end
 
 return DepthService

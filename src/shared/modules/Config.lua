@@ -208,7 +208,7 @@ Config.DivingGear = {
         MaxDepth = 4000,
         OxygenBonus = 125,
         SpeedModifier = 1.2,
-        Price = 400,
+        Price = 400, -- Balanced down from 500
         PriceCurrency = "Credits",
         Description = "Pressure-resistant suit with enhanced mobility"
     },
@@ -218,7 +218,7 @@ Config.DivingGear = {
         MaxDepth = 6000,
         OxygenBonus = 250,
         SpeedModifier = 0.9,
-        Price = 1000,
+        Price = 1000, -- Balanced down from 1500
         PriceCurrency = "Credits",
         Description = "Heavy submersible — protects against extreme pressure"
     },
@@ -228,7 +228,7 @@ Config.DivingGear = {
         MaxDepth = 11000,
         OxygenBonus = 500,
         SpeedModifier = 1.4,
-        Price = 3000,
+        Price = 3000, -- Balanced down from 5000
         PriceCurrency = "Credits",
         Description = "Cutting-edge exploration suit — nothing is out of reach"
     }
@@ -247,6 +247,7 @@ Config.CreatureRarity = {
         SellPriceMax = 15,
         SellPriceCurrency = "Credits",
         ResearchPointsOnFirstDiscovery = 1,
+        CatchChance = 0.8,
     },
     Uncommon = {
         Weight = 30,
@@ -256,6 +257,7 @@ Config.CreatureRarity = {
         SellPriceMax = 50,
         SellPriceCurrency = "Credits",
         ResearchPointsOnFirstDiscovery = 3,
+        CatchChance = 0.6,
     },
     Rare = {
         Weight = 15,
@@ -265,6 +267,7 @@ Config.CreatureRarity = {
         SellPriceMax = 200,
         SellPriceCurrency = "Credits",
         ResearchPointsOnFirstDiscovery = 10,
+        CatchChance = 0.4,
     },
     Epic = {
         Weight = 4,
@@ -274,6 +277,7 @@ Config.CreatureRarity = {
         SellPriceMax = 800,
         SellPriceCurrency = "Credits",
         ResearchPointsOnFirstDiscovery = 25,
+        CatchChance = 0.2,
     },
     Legendary = {
         Weight = 1,
@@ -283,7 +287,227 @@ Config.CreatureRarity = {
         SellPriceMax = 5000,
         SellPriceCurrency = "Credits",
         ResearchPointsOnFirstDiscovery = 50,
+        CatchChance = 0.05,
     }
+}
+
+-- ============================================================
+-- Creature Data (25+ unique creatures)
+-- ============================================================
+
+Config.Creatures = {
+    -- Sunlight Zone (0-200m)
+    {
+        Name = "Clownfish",
+        Rarity = "Common",
+        Zone = "Sunlight Zone",
+        Description = "Small orange fish with iconic white stripes. Often hides in anemones.",
+        ModelAssetId = 0,
+    },
+    {
+        Name = "Blue Tang",
+        Rarity = "Common",
+        Zone = "Sunlight Zone",
+        Description = "Vibrant blue body with a yellow tail. A favorite for reef watchers.",
+        ModelAssetId = 0,
+    },
+    {
+        Name = "Parrotfish",
+        Rarity = "Common",
+        Zone = "Sunlight Zone",
+        Description = "Colorful fish with beak-like teeth used to scrape algae off coral.",
+        ModelAssetId = 0,
+    },
+    {
+        Name = "Sea Turtle",
+        Rarity = "Uncommon",
+        Zone = "Sunlight Zone",
+        Description = "A gentle green turtle that glides gracefully through the shallow reefs.",
+        ModelAssetId = 0,
+    },
+    {
+        Name = "Reef Shark",
+        Rarity = "Rare",
+        Zone = "Sunlight Zone",
+        Description = "A sleek predator of the shallows. Generally cautious but powerful.",
+        ModelAssetId = 0,
+    },
+    {
+        Name = "Golden Manta Ray",
+        Rarity = "Legendary",
+        Zone = "Sunlight Zone",
+        Description = "A majestic, shimmering ray that only appears when the sun hits the water just right.",
+        ModelAssetId = 0,
+    },
+
+    -- Twilight Zone (200-1000m)
+    {
+        Name = "Hatchetfish",
+        Rarity = "Common",
+        Zone = "Twilight Zone",
+        Description = "Paper-thin fish with giant, upward-facing eyes to spot prey above.",
+        ModelAssetId = 0,
+    },
+    {
+        Name = "Lanternfish",
+        Rarity = "Common",
+        Zone = "Twilight Zone",
+        Description = "Small fish with photophores along its body that blink in the dark.",
+        ModelAssetId = 0,
+    },
+    {
+        Name = "Barracuda",
+        Rarity = "Uncommon",
+        Zone = "Twilight Zone",
+        Description = "A fast, silver predator with razor-sharp teeth. Known for its ambush attacks.",
+        ModelAssetId = 0,
+    },
+    {
+        Name = "Oarfish",
+        Rarity = "Rare",
+        Zone = "Twilight Zone",
+        Description = "An incredibly long, ribbon-like silver fish. Often mistaken for sea serpents.",
+        ModelAssetId = 0,
+    },
+    {
+        Name = "Giant Squid",
+        Rarity = "Epic",
+        Zone = "Twilight Zone",
+        Description = "A massive cephalopod with eyes the size of dinner plates. Rarely seen alive.",
+        ModelAssetId = 0,
+    },
+    {
+        Name = "The Silver Serpent",
+        Rarity = "Legendary",
+        Zone = "Twilight Zone",
+        Description = "A legendary eel-like creature that leaves a trail of glowing bubbles.",
+        ModelAssetId = 0,
+    },
+
+    -- Midnight Zone (1000-4000m)
+    {
+        Name = "Anglerfish",
+        Rarity = "Common",
+        Zone = "Midnight Zone",
+        Description = "A nightmare of the deep with a glowing lure to attract unsuspecting prey.",
+        ModelAssetId = 0,
+    },
+    {
+        Name = "Gulper Eel",
+        Rarity = "Common",
+        Zone = "Midnight Zone",
+        Description = "Has a massive, hinged jaw that can swallow prey much larger than itself.",
+        ModelAssetId = 0,
+    },
+    {
+        Name = "Vampire Squid",
+        Rarity = "Uncommon",
+        Zone = "Midnight Zone",
+        Description = "A deep-red cephalopod with webbed arms that look like a cape.",
+        ModelAssetId = 0,
+    },
+    {
+        Name = "Blobfish",
+        Rarity = "Rare",
+        Zone = "Midnight Zone",
+        Description = "A gelatinous mass that looks grumpy in the low-pressure surface world.",
+        ModelAssetId = 0,
+    },
+    {
+        Name = "Colossal Squid",
+        Rarity = "Epic",
+        Zone = "Midnight Zone",
+        Description = "The heaviest squid ever found, featuring rotating hooks on its tentacles.",
+        ModelAssetId = 0,
+    },
+    {
+        Name = "Abyssal Kraken",
+        Rarity = "Legendary",
+        Zone = "Midnight Zone",
+        Description = "A creature of myth, its presence is felt long before its glowing eyes emerge from the dark.",
+        ModelAssetId = 0,
+    },
+
+    -- Abyssal Zone (4000-6000m)
+    {
+        Name = "Fangtooth",
+        Rarity = "Common",
+        Zone = "Abyssal Zone",
+        Description = "Small but terrifying fish with teeth so long it can't fully close its mouth.",
+        ModelAssetId = 0,
+    },
+    {
+        Name = "Dumbo Octopus",
+        Rarity = "Uncommon",
+        Zone = "Abyssal Zone",
+        Description = "A cute octopus with ear-like fins used to 'fly' through the water.",
+        ModelAssetId = 0,
+    },
+    {
+        Name = "Tripod Fish",
+        Rarity = "Uncommon",
+        Zone = "Abyssal Zone",
+        Description = "Stands on the sea floor using three extremely long fins like stilts.",
+        ModelAssetId = 0,
+    },
+    {
+        Name = "Ghost Shark",
+        Rarity = "Rare",
+        Zone = "Abyssal Zone",
+        Description = "A pale, cartilaginous fish with stitching-like patterns on its skin.",
+        ModelAssetId = 0,
+    },
+    {
+        Name = "Abyssal Dragonfish",
+        Rarity = "Epic",
+        Zone = "Abyssal Zone",
+        Description = "A black, serpent-like fish with a long, glowing barbel attached to its chin.",
+        ModelAssetId = 0,
+    },
+    {
+        Name = "Living Fossil",
+        Rarity = "Legendary",
+        Zone = "Abyssal Zone",
+        Description = "A creature thought to be extinct for millions of years, perfectly preserved in the cold dark.",
+        ModelAssetId = 0,
+    },
+
+    -- Trenches (6000-11000m)
+    {
+        Name = "Snailfish",
+        Rarity = "Common",
+        Zone = "Trenches",
+        Description = "Translucent and delicate-looking, yet able to withstand crushing pressure.",
+        ModelAssetId = 0,
+    },
+    {
+        Name = "Deep-Sea Jellyfish",
+        Rarity = "Uncommon",
+        Zone = "Trenches",
+        Description = "A massive, dark red jelly that pulses with eerie internal lights.",
+        ModelAssetId = 0,
+    },
+    {
+        Name = "Xenophyophore",
+        Rarity = "Rare",
+        Zone = "Trenches",
+        Description = "A giant single-celled organism that looks like a structured sponge.",
+        ModelAssetId = 0,
+    },
+    {
+        Name = "Trench Leviathan",
+        Rarity = "Epic",
+        Zone = "Trenches",
+        Description = "An ancient, armored serpent that circles the deepest rifts of the world.",
+        ModelAssetId = 0,
+    },
+    {
+        Name = "The Void Soul",
+        Rarity = "Legendary",
+        Zone = "Trenches",
+        Description = "A ghostly, translucent entity that seems to be made of pure bioluminescence.",
+        ModelAssetId = 0,
+    },
 }
 
 -- ============================================================
@@ -295,17 +519,17 @@ Config.Economy = {
     MaxCollectionSlots = 200,
     XPPerDepthMeter = 0.5,
     XPPerCreatureCaptured = 25,
-    CreditsPerDepthMeter = 0.2,
-    CreditsPerDiveComplete = 25,
-    ResearchPointsPerLevel = 5,
+    CreditsPerDepthMeter = 0.2, -- Balanced up from 0.1
+    CreditsPerDiveComplete = 25, -- Balanced up from 10
+    ResearchPointsPerLevel = function(level) -- Scaling RP reward
+        return 5 + math.floor(level / 5)
+    end,
     BaseBuildingCosts = {
-                -- Simplified: 2 module types per lead instructions
-                Habitat = {Credits = 100, Scrap = 30, Crystal = 10},
-                Lab = {Credits = 150, Scrap = 50, Crystal = 20},
-                -- Upgrade costs: T2 = 1.5x base, T3 = 3x base
-                UpgradeMultiplier = {[2] = 1.5, [3] = 3},
-                MaxModules = 10,
-                MaxTier = 3,
+                 Habitat = {Credits = 100, Scrap = 30, Crystal = 10},
+                 Lab = {Credits = 150, Scrap = 50, Crystal = 20},
+                 UpgradeMultiplier = {[2] = 1.5, [3] = 3},
+                 MaxModules = 10,
+                 MaxTier = 3,
         },
 }
 
@@ -402,7 +626,7 @@ Config.ShopItems = {
         Name = "Emergency Oxygen Tank",
         Description = "Refills 50% of your oxygen instantly",
         Category = "Consumable",
-        Price = 10,
+        Price = 10, -- Balanced down from 25
         PriceCurrency = "Credits",
         Effect = "RefillOxygen",
         EffectValue = 0.5,
@@ -412,7 +636,7 @@ Config.ShopItems = {
         Name = "Rare Lure",
         Description = "Attracts rare creatures for 60 seconds",
         Category = "Consumable",
-        Price = 20,
+        Price = 20, -- Balanced down from 50
         PriceCurrency = "Credits",
         Effect = "RareLure",
         EffectValue = 60,
@@ -422,7 +646,7 @@ Config.ShopItems = {
         Name = "Propulsion Boost",
         Description = "+40% swim speed for 30 seconds",
         Category = "Consumable",
-        Price = 15,
+        Price = 15, -- Balanced down from 30
         PriceCurrency = "Credits",
         Effect = "SpeedBoost",
         EffectValue = 30,
