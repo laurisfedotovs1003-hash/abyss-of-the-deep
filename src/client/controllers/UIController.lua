@@ -7,6 +7,8 @@ local Knit = Knit or require(game:GetService("ReplicatedStorage"):WaitForChild("
 local Config = require(game:GetService("ReplicatedStorage"):WaitForChild("KnitShared"):WaitForChild("Modules"):WaitForChild("Config"))
 local UIStyles = require(script.Parent.Parent.ui.UIStyles)
 local UIComponents = require(script.Parent.Parent.ui.UIComponents)
+local ShopScreen = require(script.Parent.Parent.ui.screens.ShopScreen)
+local InventoryScreen = require(script.Parent.Parent.ui.screens.InventoryScreen)
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
@@ -790,317 +792,54 @@ end
 -- ================================================================
 
 function UIController:ShowShop()
-    if cachedScreens.Shop then
+    if cachedScreens.Shop and cachedScreens.Shop.Enabled then
         cachedScreens.Shop.Enabled = true
         return
     end
 
-    -- Create shop container (overlay)
     local container = CreateScreenContainer("ShopUI")
     container.DisplayOrder = 5
     cachedScreens.Shop = container
 
-    -- Background dimmer (click to close)
-    local dimmer = New("Frame", {
-        Name = "Dimmer",
-        Size = UDim2.fromScale(1, 1),
-        BackgroundColor3 = Color3.new(0, 0, 0),
-        BackgroundTransparency = 0.6,
-        Parent = container,
-    })
+    -- Build the enhanced shop screen using ShopScreen module
+    local shopAPI = ShopScreen.Create(container)
 
-    -- Shop panel (scrollable)
-    local shopPanel = New("Frame", {
-        Name = "ShopPanel",
-        Size = UDim2.new(1, -24, 1, -24),
-        Position = UDim2.fromScale(0.5, 0.5),
-        AnchorPoint = Vector2.new(0.5, 0.5),
-        BackgroundColor3 = UIStyles.Colors.SurfaceDark,
-        BackgroundTransparency = 0.05,
-        ClipsDescendants = true,
-        Parent = container,
-    })
-    NewCorner(20).Parent = shopPanel
-    NewStroke(UIStyles.Colors.Border, 0.7, 1).Parent = shopPanel
-
-    -- Shop content
-    local contentPadding = New("UIPadding", {
-        PaddingLeft = UDim.new(0, 16),
-        PaddingRight = UDim.new(0, 16),
-        PaddingTop = UDim.new(0, 16),
-        PaddingBottom = UDim.new(0, 16),
-        Parent = shopPanel,
-    })
-
-    -- Header
-    local headerFrame = New("Frame", {
-        Name = "ShopHeader",
-        Size = UDim2.fromScale(1, 0),
-        Height = UDim.new(0, 50),
-        BackgroundTransparency = 1,
-        Parent = shopPanel,
-    })
-
-    local titleLabel = UIComponents.CreateTextLabel({
-        Name = "Title",
-        Text = "🏪 EQUIPMENT SHOP",
-        Size = UDim2.fromOffset(250, 28),
-        Position = UDim2.fromScale(0, 0.5),
-        AnchorPoint = Vector2.new(0, 0.5),
-        Color = UIStyles.Colors.TextPrimary,
-        Font = UIStyles.Fonts.Display,
-        TextSize = UIStyles.FontSizes.SectionTitle,
-        Parent = headerFrame,
-    })
-
+    -- Wire close button
     local closeBtn = UIComponents.CreateIconButton({
-        Name = "CloseBtn",
-        Icon = "✕",
-        Size = 36,
-        Color = UIStyles.Colors.Elevated,
+        Icon = "✕", Size = 36, Color = UIStyles.Colors.Elevated,
         StrokeColor = UIStyles.Colors.Border,
-        Position = UDim2.new(1, 0, 0.5, 0),
-        AnchorPoint = Vector2.new(1, 0.5),
-        Callback = function()
-            self:PopScreen()
-        end,
-        Parent = headerFrame,
+        Position = UDim2.new(1, -20, 0, 20), AnchorPoint = Vector2.new(1, 0),
+        Callback = function() self:PopScreen() end,
+        Parent = container,
     })
 
-    -- Currency bar
-    local currencyBar = UIComponents.CreatePanel({
-        Name = "ShopCurrency",
-        Size = UDim2.fromScale(1, 0),
-        Height = UDim.new(0, 40),
-        Color = UIStyles.Colors.CardBG,
-        Transparency = 0.4,
-        Parent = shopPanel,
-    })
-
-    local currencyFrame = New("Frame", {
-        Name = "CurrencyFrame",
-        Size = UDim2.fromScale(1, 1),
-        BackgroundTransparency = 1,
-        Parent = currencyBar,
-    })
-
-    -- Dynamic currency labels
-    local shopCredits = UIComponents.CreateTextLabel({
-        Text = "🪙 50",
-        Size = UDim2.fromOffset(120, 40),
-        Color = UIStyles.Colors.Gold,
-        Font = UIStyles.Fonts.Number,
-        TextSize = UIStyles.FontSizes.HUDSmall,
-        TextXAlignment = Enum.TextXAlignment.Center,
-        Parent = currencyFrame,
-    })
-
-    local shopRP = UIComponents.CreateTextLabel({
-        Text = "🔬 0",
-        Size = UDim2.fromOffset(120, 40),
-        Position = UDim2.fromOffset(140, 0),
-        Color = UIStyles.Colors.DeepPurple,
-        Font = UIStyles.Fonts.Number,
-        TextSize = UIStyles.FontSizes.HUDSmall,
-        TextXAlignment = Enum.TextXAlignment.Center,
-        Parent = currencyFrame,
-    })
-
-    -- Keep references for updates
-    container._creditsLabel = shopCredits
-    container._rpLabel = shopRP
-
-    -- Listen for economy updates
+    -- Update currency on economy events
     local EconomyService = Knit.GetService("EconomyService")
     if EconomyService then
         EconomyService.Client:Get("EconomyUpdated"):Connect(function(data)
-            if container and container.Parent then
-                local c = data.currency or data.credits or 0
-                local r = data.researchPoints or data.rp or 0
-                shopCredits.Text = "🪙 " .. tostring(math.floor(c))
-                shopRP.Text = "🔬 " .. tostring(math.floor(r))
+            if container and container.Parent and shopAPI.UpdateCurrency then
+                shopAPI.UpdateCurrency(data.Credits or data.credits or 0, data.ResearchPoints or data.researchPoints or 0)
             end
         end)
     end
 
-    -- Category tabs
-    local tabsFrame = New("Frame", {
-        Name = "Tabs",
-        Size = UDim2.fromScale(1, 0),
-        Height = UDim.new(0, 40),
-        BackgroundTransparency = 1,
-        Parent = shopPanel,
-    })
-
-    local categories = {"Diving Suits", "Submarines", "Tools", "Upgrades"}
-    local selectedCategory = 1
-
-    local function BuildCategoryTab(index, name)
-        local isSelected = index == selectedCategory
-        local tab = UIComponents.CreateButton({
-            Name = "Tab_" .. name,
-            Text = name,
-            Size = UDim2.fromOffset(0, 36),
-            Position = UDim2.fromScale(0, 0),
-            Color = isSelected and UIStyles.Colors.Cyan or UIStyles.Colors.SurfaceDark,
-            Transparency = isSelected and 0.8 or 0.5,
-            TextColor = isSelected and UIStyles.Colors.Cyan or UIStyles.Colors.TextMuted,
-            FontSize = UIStyles.FontSizes.Small,
-            CornerRadius = 8,
-            Stroke = true,
-            StrokeColor = isSelected and UIStyles.Colors.Cyan or UIStyles.Colors.Border,
-            Callback = function()
-                selectedCategory = index
-                -- Rebuild tabs
-                for _, child in ipairs(tabsFrame:GetChildren()) do
-                    child:Destroy()
-                end
-                for i, catName in ipairs(categories) do
-                    local newTab = BuildCategoryTab(i, catName)
-                    newTab.Position = UDim2.fromOffset((i - 1) * 120, 4)
-                    newTab.Size = UDim2.fromOffset(110, 36)
-                    newTab.Parent = tabsFrame
-                end
-                -- Refresh items
-                self:RefreshShopItems(shopPanel, selectedCategory)
-            end,
-        })
-        return tab
-    end
-
-    -- Build tabs
-    for i, catName in ipairs(categories) do
-        local tab = BuildCategoryTab(i, catName)
-        tab.Size = UDim2.fromOffset(110, 36)
-        tab.Position = UDim2.fromOffset((i - 1) * 120, 4)
-        tab.Parent = tabsFrame
-    end
-
-    -- Items scrolling area (filled by RefreshShopItems)
-    local itemsFrame = New("Frame", {
-        Name = "ItemsFrame",
-        Size = UDim2.new(1, 0, 1, -170),
-        Position = UDim2.fromScale(0, 0),
-        BackgroundTransparency = 1,
-        Parent = shopPanel,
-    })
-    itemsFrame.Position = UDim2.fromOffset(0, 170)
-    shopPanel._itemsFrame = itemsFrame
-
-    -- Scrolling wrapper
-    local scrolling = New("ScrollingFrame", {
-        Name = "ScrollingItems",
-        Size = UDim2.fromScale(1, 1),
-        BackgroundTransparency = 1,
-        ScrollBarThickness = 4,
-        ScrollBarImageColor3 = UIStyles.Colors.Cyan,
-        ScrollingDirection = Enum.ScrollingDirection.Y,
-        AutomaticCanvasSize = Enum.AutomaticSize.Y,
-        CanvasSize = UDim2.fromScale(1, 1),
-        Parent = itemsFrame,
-    })
-    shopPanel._scrolling = scrolling
-
-    -- Populate first category
-    self:RefreshShopItems(shopPanel, selectedCategory)
-
-    -- Store close function
-    container.Close = function()
-        container.Enabled = false
+    -- Listen for anomaly state
+    local AnomalyService = Knit.GetService("AnomalyService")
+    if AnomalyService then
+        AnomalyService.Client:Get("AnomalyStateChanged"):Connect(function(data)
+            if container and container.Parent and shopAPI.SetAnomalyActive then
+                shopAPI.SetAnomalyActive(data.active or false)
+            end
+        end)
     end
 end
 
 -- ================================================================
--- Refresh Shop Items (by category)
--- ================================================================
-
-function UIController:RefreshShopItems(shopPanel, categoryIndex)
-    local scrolling = shopPanel._scrolling
-    if not scrolling then return end
-
-    -- Clear existing items
-    for _, child in ipairs(scrolling:GetChildren()) do
-        if child:IsA("Frame") then
-            child:Destroy()
-        end
-    end
-
-    -- Gear data from Config
-    local function GetGearItems()
-        local items = {}
-        for _, gear in ipairs(Config.DivingGear) do
-            table.insert(items, {
-                name = gear.Name,
-                icon = gear.Tier <= 2 and "🤿" or gear.Tier <= 3 and "🫧" or gear.Tier <= 4 and "🚤" or "🛸",
-                tier = gear.Tier,
-                stats = string.format("O₂: +%d · Speed: x%.1f · Limit: %dm", gear.OxygenBonus, gear.SpeedModifier, gear.MaxDepth),
-                price = gear.Price,
-                priceType = "credits",
-                category = "Diving Suits",
-            })
-        end
-        return items
-    end
-
-    local allItems = {
-        GetGearItems(),  -- Diving Suits
-        {                -- Submarines
-            {name = "Explorer Sub", icon = "🚤", tier = 1, stats = "Hull: 200 · Cargo: 10 · Depth: 1,000m", price = 500, priceType = "credits"},
-            {name = "Nautilus MkII", icon = "🛸", tier = 2, stats = "Hull: 500 · Cargo: 25 · Depth: 4,000m", price = 2000, priceType = "credits"},
-            {name = "Abyssal Crawler", icon = "⚙️", tier = 3, stats = "Hull: 1200 · Cargo: 50 · Depth: 11,000m", price = 8000, priceType = "credits"},
-            {name = "Phantom Sub", icon = "👻", tier = 2, stats = "Stealth mode · Anomaly resistance", price = 350, priceType = "robux"},
-        },
-        {                -- Tools
-            {name = "Harpoon Gun", icon = "🔱", tier = 1, stats = "Damage: 20 · Range: 50m", price = 100, priceType = "credits"},
-            {name = "Deep Scanner", icon = "📡", tier = 2, stats = "Reveals rare resources · 100m range", price = 400, priceType = "credits"},
-            {name = "Mining Drill", icon = "⛏️", tier = 2, stats = "Ore yield: 2x · Speed: Fast", price = 600, priceType = "credits"},
-            {name = "Sonic Bait", icon = "🎵", tier = 1, stats = "Attracts rare creatures", price = 150, priceType = "robux"},
-        },
-        {                -- Upgrades
-            {name = "O₂ Extender", icon = "🫧", tier = 1, stats = "+50 Max Oxygen", price = 200, priceType = "credits"},
-            {name = "Hull Plating", icon = "🛡️", tier = 2, stats = "+20% Pressure Resistance", price = 800, priceType = "credits"},
-            {name = "Speed Fins", icon = "🏊", tier = 1, stats = "+15% Swim Speed", price = 300, priceType = "credits"},
-            {name = "Xp Booster", icon = "⚡", tier = 1, stats = "2x XP for 1 hour", price = 50, priceType = "robux"},
-            {name = "Collection Slot+", icon = "📦", tier = 1, stats = "+20 Collection Slots", price = 100, priceType = "robux"},
-        },
-    }
-
-    local items = allItems[categoryIndex] or {}
-
-    for i, item in ipairs(items) do
-        -- Determine state based on player gear
-        local state = "available"
-        if item.price == 0 then
-            state = "owned"
-        end
-
-        local card = UIComponents.CreateShopItemCard({
-            Name = item.name,
-            Icon = item.icon,
-            Tier = item.tier,
-            Stats = item.stats,
-            Price = item.price,
-            PriceType = item.priceType,
-            State = state,
-            OnPurchase = function()
-                self:ShowGameMessage("Purchase: " .. item.name .. " — " .. tostring(item.price))
-                -- In production, this would call EconomyService
-            end,
-            Parent = scrolling,
-        })
-        card.Position = UDim2.fromOffset(0, (i - 1) * 98 + 4)
-    end
-
-    -- Update canvas size
-    scrolling.CanvasSize = UDim2.fromOffset(0, #items * 98 + 8)
-end
-
--- ================================================================
--- COLLECTION SCREEN (Inventory)
+-- COLLECTION / INVENTORY SCREEN
 -- ================================================================
 
 function UIController:ShowCollection()
-    if cachedScreens.Collection then
+    if cachedScreens.Collection and cachedScreens.Collection.Enabled then
         cachedScreens.Collection.Enabled = true
         return
     end
@@ -1109,169 +848,35 @@ function UIController:ShowCollection()
     container.DisplayOrder = 5
     cachedScreens.Collection = container
 
-    -- Dimmer
-    local dimmer = New("Frame", {
-        Name = "Dimmer",
-        Size = UDim2.fromScale(1, 1),
-        BackgroundColor3 = Color3.new(0, 0, 0),
-        BackgroundTransparency = 0.6,
-        Parent = container,
-    })
+    -- Build the enhanced inventory screen
+    local invAPI = InventoryScreen.Create(container)
 
-    -- Collection Panel
-    local panel = New("Frame", {
-        Name = "CollectionPanel",
-        Size = UDim2.new(1, -24, 1, -24),
-        Position = UDim2.fromScale(0.5, 0.5),
-        AnchorPoint = Vector2.new(0.5, 0.5),
-        BackgroundColor3 = UIStyles.Colors.SurfaceDark,
-        BackgroundTransparency = 0.05,
-        ClipsDescendants = true,
-        Parent = container,
-    })
-    NewCorner(20).Parent = panel
-    NewStroke(UIStyles.Colors.Border, 0.7, 1).Parent = panel
-
-    -- Header
-    local headerFrame = New("Frame", {
-        Name = "CollectionHeader",
-        Size = UDim2.fromScale(1, 0),
-        Height = UDim.new(0, 50),
-        BackgroundTransparency = 1,
-        Parent = panel,
-    })
-
-    local titleLabel = UIComponents.CreateTextLabel({
-        Text = "🎒 COLLECTION",
-        Size = UDim2.fromOffset(250, 28),
-        Position = UDim2.fromScale(0, 0.5),
-        AnchorPoint = Vector2.new(0, 0.5),
-        Color = UIStyles.Colors.TextPrimary,
-        Font = UIStyles.Fonts.Display,
-        TextSize = UIStyles.FontSizes.SectionTitle,
-        Parent = headerFrame,
-    })
-
+    -- Wire close button
     local closeBtn = UIComponents.CreateIconButton({
-        Icon = "✕",
-        Size = 36,
-        Color = UIStyles.Colors.Elevated,
+        Icon = "✕", Size = 36, Color = UIStyles.Colors.Elevated,
         StrokeColor = UIStyles.Colors.Border,
-        Position = UDim2.new(1, 0, 0.5, 0),
-        AnchorPoint = Vector2.new(1, 0.5),
-        Callback = function()
-            self:PopScreen()
-        end,
-        Parent = headerFrame,
+        Position = UDim2.new(1, -20, 0, 20), AnchorPoint = Vector2.new(1, 0),
+        Callback = function() self:PopScreen() end,
+        Parent = container,
     })
 
-    -- Filter tabs
-    local filtersFrame = New("Frame", {
-        Name = "Filters",
-        Size = UDim2.fromScale(1, 0),
-        Height = UDim.new(0, 36),
-        BackgroundTransparency = 1,
-        Parent = panel,
-    })
-    filtersFrame.Position = UDim2.fromOffset(0, 56)
-
-    local filters = {"All", "Creatures", "Minerals", "Equipment", "Anomalies"}
-    for i, filterName in ipairs(filters) do
-        local filterTab = UIComponents.CreateButton({
-            Name = "Filter_" .. filterName,
-            Text = filterName,
-            Size = UDim2.fromOffset(80, 36),
-            Position = UDim2.fromOffset((i - 1) * 90, 0),
-            Color = i == 1 and UIStyles.Colors.Cyan or UIStyles.Colors.SurfaceDark,
-            Transparency = i == 1 and 0.8 or 0.5,
-            TextColor = i == 1 and UIStyles.Colors.Cyan or UIStyles.Colors.TextMuted,
-            FontSize = UIStyles.FontSizes.Small,
-            CornerRadius = 8,
-            Stroke = true,
-            StrokeColor = i == 1 and UIStyles.Colors.Cyan or UIStyles.Colors.Border,
-            Parent = filtersFrame,
-        })
-        filterTab.Size = UDim2.fromOffset(80, 36)
-    end
-
-    -- Grid (Scrollable)
-    local gridFrame = New("Frame", {
-        Name = "GridFrame",
-        Size = UDim2.new(1, 0, 1, -106),
-        Position = UDim2.fromOffset(0, 106),
-        BackgroundTransparency = 1,
-        Parent = panel,
-    })
-
-    local grid = New("ScrollingFrame", {
-        Name = "CreatureGrid",
-        Size = UDim2.fromScale(1, 1),
-        BackgroundTransparency = 1,
-        ScrollBarThickness = 4,
-        ScrollBarImageColor3 = UIStyles.Colors.DeepPurple,
-        ScrollingDirection = Enum.ScrollingDirection.Y,
-        CanvasSize = UDim2.fromScale(1, 2),
-        Parent = gridFrame,
-    })
-
-    -- Sample creature data (in production, comes from CollectionService)
-    local sampleCreatures = {
-        {name = "Glowfin Tetra", icon = "🐟", rarity = "Common", sellPrice = 45, zone = "Twilight"},
-        {name = "Shadow Shark", icon = "🦈", rarity = "Rare", sellPrice = 320, zone = "Midnight"},
-        {name = "Void Crystal", icon = "💎", rarity = "Rare", sellPrice = 280, zone = "Abyss"},
-        {name = "Biolum Coral", icon = "🪸", rarity = "Uncommon", sellPrice = 120, zone = "Twilight"},
-        {name = "Phantom Squid", icon = "🐙", rarity = "Epic", sellPrice = 950, zone = "Abyss"},
-        {name = "Iron Ore", icon = "🪨", rarity = "Common", sellPrice = 15, zone = "Sunlight"},
-        {name = "Echo Eye", icon = "👁️", rarity = "Anomaly", sellPrice = 2400, zone = "Trench"},
-        {name = "Depth Pearl", icon = "🔮", rarity = "Epic", sellPrice = 780, zone = "Midnight"},
-        {name = "Kelp Sprout", icon = "🌿", rarity = "Common", sellPrice = 8, zone = "Sunlight"},
-        {name = "Anglerfish", icon = "🎣", rarity = "Uncommon", sellPrice = 65, zone = "Midnight"},
-        {name = "Ancient Coin", icon = "🪙", rarity = "Rare", sellPrice = 500, zone = "Abyss"},
-        {name = "Abyssal Crown", icon = "👑", rarity = "Legendary", sellPrice = 5000, zone = "Trench"},
-    }
-
-    -- Build grid items in a 2-column layout
-    local cols = 2
-    local cardWidth = (grid.AbsoluteSize.X - 20) / cols
-    local cardHeight = 170
-
-    for i, creature in ipairs(sampleCreatures) do
-        local col = (i - 1) % cols
-        local row = math.floor((i - 1) / cols)
-
-        local card = UIComponents.CreateCreatureCard({
-            Name = creature.name,
-            Icon = creature.icon,
-            Rarity = creature.rarity,
-            SellPrice = creature.sellPrice,
-            Zone = creature.zone,
-            Size = cardWidth - 8,
-            Position = UDim2.fromOffset(col * (cardWidth + 8), row * (cardHeight + 8) + 4),
-            Parent = grid,
-        })
-    end
-
-    -- Update canvas size for grid
-    local totalRows = math.ceil(#sampleCreatures / cols)
-    grid.CanvasSize = UDim2.fromOffset(0, totalRows * (cardHeight + 8) + 12)
-
-    -- Add _update handler for real-time collection data from CollectionService
-    -- CollectionService sends: { totalUnique, totalPossible, completion, isNewDiscovery }
+    -- _update handler for collection data from CollectionService
     container._update = function(data)
-        if not data then return end
-        local totalUnique = data.totalUnique or 0
-        local totalPossible = data.totalPossible or 1
-        local completion = (totalPossible > 0 and math.floor((totalUnique / totalPossible) * 100)) or 0
-        local isNew = data.isNewDiscovery or false
-
-        -- Update title to show progress
-        if titleLabel then
-            titleLabel.Text = "🎒 COLLECTION (" .. tostring(totalUnique) .. "/" .. tostring(totalPossible) .. ")"
-        end
-
-        -- Show toast for new discovery
-        if isNew then
+        if not data or not invAPI.UpdateProgress then return end
+        invAPI.UpdateProgress(data.totalUnique or 0, data.totalPossible or 1)
+        if data.isNewDiscovery then
             self:ShowGameMessage("🌟 New discovery added to collection!")
+        end
+    end
+
+    -- Fetch initial collection data
+    local CollectionService = Knit.GetService("CollectionService")
+    if CollectionService and CollectionService.Client then
+        local ok, result = pcall(function()
+            return CollectionService.Client:Get("GetCollectionProgress"):Fire()
+        end)
+        if ok and result then
+            invAPI.UpdateProgress(result.totalUnique or 0, result.totalPossible or 1)
         end
     end
 end
@@ -1654,6 +1259,51 @@ function UIController:ShowAnomalyEnded(data)
     
     -- Show end message
     self:ShowGameMessage(string.format("✅ %s has passed. The depths return to normal.", data.displayName or "Echo Event"))
+end
+
+-- ================================================================
+-- Fishing & Harvest Event Handling
+-- ================================================================
+
+function UIController:HandleFishingEvent(eventName, data)
+    if not eventName then return end
+
+    if eventName == "FishingRodEquipped" then
+        self:ShowGameMessage("🎣 Fishing Rod equipped — click to cast!")
+        
+    elseif eventName == "Casting" then
+        self:ShowGameMessage("🎣 Casting line...")
+        
+    elseif eventName == "LineCast" then
+        self:ShowGameMessage(string.format("🎣 Line cast in %s — waiting for a bite...", data and data.zoneName or "the depths"))
+        
+    elseif eventName == "FishBite" then
+        self:ShowGameMessage("⚡ FISH ON! Click to reel in!")
+        
+    elseif eventName == "Reeling" then
+        self:ShowGameMessage("🎣 Reeling in...")
+        
+    elseif eventName == "FishingEnded" then
+        -- Result already shown via GameMessage
+        
+    elseif eventName == "HarvestToolEquipped" then
+        self:ShowGameMessage("🔧 Harvest Tool equipped — aim at resources and click")
+        
+    elseif eventName == "Harvesting" then
+        self:ShowGameMessage("🪨 Harvesting " .. (data and data.type or "resources") .. "...")
+        
+    elseif eventName == "GameMessage" and data then
+        self:ShowGameMessage(data.Text or "")
+        
+    elseif eventName == "DiveStarted" then
+        self:ShowGameMessage("🌊 Diving beneath the surface...")
+        
+    elseif eventName == "DiveEnded" then
+        self:ShowGameMessage("🌊 Returned to the surface")
+        
+    elseif eventName == "CriticalOxygen" then
+        self:ShowGameMessage("⚠️ CRITICAL OXYGEN — Surface immediately!")
+    end
 end
 
 -- ================================================================
