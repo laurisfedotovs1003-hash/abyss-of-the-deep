@@ -4,6 +4,7 @@
 ]]
 
 local Knit = Knit or require(game:GetService("ReplicatedStorage"):WaitForChild("Packages"):WaitForChild("Knit"))
+local Logger = require(game:GetService("ReplicatedStorage"):WaitForChild("KnitShared"):WaitForChild("Modules"):WaitForChild("Logger"))
 local DataStoreService2 = game:GetService("DataStoreService")
 
 local LeaderboardService = Knit.CreateService {

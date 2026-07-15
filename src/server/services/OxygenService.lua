@@ -17,6 +17,7 @@ local OxygenService = Knit.CreateService {
 }
 
 -- Internal player state
+local Logger = require(game:GetService("ReplicatedStorage"):WaitForChild("KnitShared"):WaitForChild("Modules"):WaitForChild("Logger"))
 local playerOxygen = {} -- { [UserId] = { current: number, max: number, isDiving: bool, tickCounter: number } }
 
 function OxygenService:KnitStart()

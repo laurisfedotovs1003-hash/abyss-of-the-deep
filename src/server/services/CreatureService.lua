@@ -23,6 +23,7 @@ local CreatureService = Knit.CreateService {
 }
 
 -- Creature definitions per depth layer
+local Logger = require(game:GetService("ReplicatedStorage"):WaitForChild("KnitShared"):WaitForChild("Modules"):WaitForChild("Logger"))
 local creatures = {
     [1] = { -- Sunlight Zone
         { Id = "clownfish", DisplayName = "Clownfish", Rarity = "Common", Weight = 0.2, Size = 1 },

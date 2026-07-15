@@ -21,6 +21,7 @@ local DepthService = Knit.CreateService {
 }
 
 -- Internal state
+local Logger = require(game:GetService("ReplicatedStorage"):WaitForChild("KnitShared"):WaitForChild("Modules"):WaitForChild("Logger"))
 local playerDepths = {}    -- { [UserId] = { depth, layerIndex, gearTier, maxDepthReached, ownedGearTiers[] } }
 local zoneEntryRewards = {} -- Track zone entry for first-time RP rewards
 

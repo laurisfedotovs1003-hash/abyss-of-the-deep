@@ -7,6 +7,10 @@ local UIStyles = require(script.Parent.UIStyles)
 
 local UIComponents = {}
 
+-- Shared services
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+
 -- ============================================================
 -- Core Helpers
 -- ============================================================
@@ -145,27 +149,32 @@ function UIComponents.CreateButton(props)
         frame._label = label
     end
 
-    -- Click detection
-    local button = New("ImageButton", {
-        Name = "Hitbox",
-        Size = UDim2.fromScale(1, 1),
-        BackgroundTransparency = 1,
-        ImageTransparency = 1,
-        ZIndex = 10,
-        Parent = frame,
-    })
+    -- Click detection (mobile + desktop compatible)
+        local button = New("ImageButton", {
+            Name = "Hitbox",
+            Size = UDim2.fromScale(1, 1),
+            BackgroundTransparency = 1,
+            ImageTransparency = 1,
+            ZIndex = 10,
+            Parent = frame,
+        })
 
-    if props.Callback then
-        button.MouseButton1Click:Connect(props.Callback)
+        if props.Callback then
+            button.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1
+                    or input.UserInputType == Enum.UserInputType.Touch then
+                    props.Callback()
+                end
+            end)
+        end
+
+        frame._button = button
+        return frame
     end
 
-    frame._button = button
-    return frame
-end
-
--- ============================================================
--- Component: Circular Icon Button (HUD)
--- ============================================================
+    -- ============================================================
+    -- Component: Circular Icon Button (HUD)
+    -- ============================================================
 
 function UIComponents.CreateIconButton(props)
     local size = props.Size or UIStyles.Button.HUDActionSize
@@ -223,18 +232,21 @@ function UIComponents.CreateIconButton(props)
     })
 
     if props.Callback then
-        button.MouseButton1Click:Connect(function()
-            -- Scale press feedback
-            local tween = TweenService:Create(frame,
-                TweenInfo.new(0.1, Enum.EasingStyle.Quad),
-                {BackgroundTransparency = 0.3})
-            tween:Play()
-            tween.Completed:Wait()
-            local tween2 = TweenService:Create(frame,
-                TweenInfo.new(0.15, Enum.EasingStyle.Quad),
-                {BackgroundTransparency = 0.1})
-            tween2:Play()
-            props.Callback()
+        button.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1
+                or input.UserInputType == Enum.UserInputType.Touch then
+                -- Scale press feedback
+                local tween = TweenService:Create(frame,
+                    TweenInfo.new(0.1, Enum.EasingStyle.Quad),
+                    {BackgroundTransparency = 0.3})
+                tween:Play()
+                tween.Completed:Wait()
+                local tween2 = TweenService:Create(frame,
+                    TweenInfo.new(0.15, Enum.EasingStyle.Quad),
+                    {BackgroundTransparency = 0.1})
+                tween2:Play()
+                props.Callback()
+            end
         end)
     end
 
@@ -647,17 +659,294 @@ function UIComponents.CreateToast(props)
         return game:GetService("TweenService"):Create(toast,
             TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
             {Position = UDim2.fromScale(0.5, 0.1)}
-        )
+        ):Play()
     end
 
     toast.AnimateOut = function()
         return game:GetService("TweenService"):Create(toast,
             TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
             {Position = UDim2.fromScale(0.5, -0.1)}
-        )
+        ):Play()
     end
 
     return toast
+end
+
+-- ================================================================
+-- Component: Screen Transition Overlay
+-- ================================================================
+
+function UIComponents.CreateScreenTransition(props)
+    local TweenService = game:GetService("TweenService")
+    local direction = props.Direction or "left"  -- "left", "right", "up", "down", "fade"
+    local duration = props.Duration or 0.25
+    local parent = props.Parent
+
+    local overlay = New("Frame", {
+        Name = "ScreenTransition",
+        Size = UDim2.fromScale(1, 1),
+        Position = UDim2.fromScale(0, 0),
+        BackgroundColor3 = UIStyles.Colors.DeepOcean,
+        BackgroundTransparency = 1,
+        ZIndex = 50,
+        Parent = parent,
+    })
+
+    local api = {}
+
+    function api.SlideIn(callback)
+        overlay.BackgroundTransparency = 0
+        -- Start off-screen
+        if direction == "left" then
+            overlay.Position = UDim2.new(1, 0, 0, 0)
+        elseif direction == "right" then
+            overlay.Position = UDim2.new(-1, 0, 0, 0)
+        elseif direction == "up" then
+            overlay.Position = UDim2.new(0, 0, 1, 0)
+        elseif direction == "down" then
+            overlay.Position = UDim2.new(0, 0, -1, 0)
+        end
+
+        TweenService:Create(overlay, TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            Position = UDim2.fromScale(0, 0)
+        }):Play()
+
+        if callback then
+            task.delay(duration, callback)
+        end
+        return overlay
+    end
+
+    function api.SlideOut(callback)
+        TweenService:Create(overlay, TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+            Position = UDim2.fromScale(1, 0)
+        }):Play()
+
+        if callback then
+            task.delay(duration, callback)
+        end
+        return overlay
+    end
+
+    function api.FadeIn(callback)
+        TweenService:Create(overlay, TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            BackgroundTransparency = 0
+        }):Play()
+
+        if callback then
+            task.delay(duration, callback)
+        end
+        return overlay
+    end
+
+    function api.FadeOut(callback)
+        TweenService:Create(overlay, TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            BackgroundTransparency = 1
+        }):Play()
+
+        if callback then
+            task.delay(duration, callback)
+        end
+        return overlay
+    end
+
+    function api.Destroy()
+        overlay:Destroy()
+    end
+
+    return api
+end
+
+-- ================================================================
+-- Component: Level-Up Celebration Screen
+-- ================================================================
+
+function UIComponents.CreateLevelUpScreen(props)
+    local TweenService = game:GetService("TweenService")
+    local level = props.Level or 1
+    local rewards = props.Rewards or {}
+    local parent = props.Parent
+
+    -- Full-screen overlay
+    local overlay = New("Frame", {
+        Name = "LevelUpOverlay",
+        Size = UDim2.fromScale(1, 1),
+        BackgroundColor3 = Color3.new(0, 0, 0),
+        BackgroundTransparency = 0.4,
+        ZIndex = 30,
+        Parent = parent,
+    })
+
+    -- Central celebration panel
+    local panel = New("Frame", {
+        Name = "LevelUpPanel",
+        Size = UDim2.fromOffset(0, 0),
+        Position = UDim2.fromScale(0.5, 0.5),
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        BackgroundColor3 = UIStyles.Colors.SurfaceDark,
+        BackgroundTransparency = 0.05,
+        ClipsDescendants = true,
+        ZIndex = 31,
+        Parent = overlay,
+    })
+    NewCorner(UIStyles.Spacing.CardRadius).Parent = panel
+    NewStroke(UIStyles.Colors.Gold, 0.3, 3).Parent = panel
+
+    -- Level up text
+    local levelLabel = UIComponents.CreateTextLabel({
+        Name = "LevelUpLabel",
+        Text = "⬆ LEVEL UP! ⬆",
+        Size = UDim2.fromOffset(280, 36),
+        Position = UDim2.fromScale(0.5, 0.08),
+        AnchorPoint = Vector2.new(0.5, 0),
+        Color = UIStyles.Colors.Gold,
+        Font = UIStyles.Fonts.Display,
+        TextSize = UIStyles.FontSizes.SectionTitle,
+        TextXAlignment = Enum.TextXAlignment.Center,
+        ZIndex = 32,
+        Parent = panel,
+    })
+
+    -- Level number (big)
+    local levelValue = UIComponents.CreateTextLabel({
+        Name = "LevelValue",
+        Text = "Level " .. tostring(level),
+        Size = UDim2.fromOffset(280, 60),
+        Position = UDim2.fromScale(0.5, 0.2),
+        AnchorPoint = Vector2.new(0.5, 0),
+        Color = UIStyles.Colors.Gold,
+        Font = UIStyles.Fonts.Number,
+        TextSize = 48,
+        TextXAlignment = Enum.TextXAlignment.Center,
+        ZIndex = 32,
+        Parent = panel,
+    })
+
+    -- XP Bar
+    local xpBar = New("Frame", {
+        Name = "XPBar",
+        Size = UDim2.fromOffset(260, 16),
+        Position = UDim2.fromScale(0.5, 0.45),
+        AnchorPoint = Vector2.new(0.5, 0),
+        BackgroundColor3 = UIStyles.Colors.SurfaceDark,
+        BackgroundTransparency = 0.3,
+        ClipsDescendants = true,
+        ZIndex = 32,
+        Parent = panel,
+    })
+    NewCorner(8).Parent = xpBar
+
+    local xpFill = New("Frame", {
+        Name = "XPFill",
+        Size = UDim2.fromScale(0, 1),
+        BackgroundColor3 = UIStyles.Colors.Cyan,
+        ClipsDescendants = true,
+        ZIndex = 33,
+        Parent = xpBar,
+    })
+    NewCorner(8).Parent = xpFill
+
+    local xpLabel = UIComponents.CreateTextLabel({
+        Name = "XPLabel",
+        Text = "XP  " .. tostring(props.XPRemaining or 0) .. " → NEXT LEVEL",
+        Size = UDim2.fromOffset(260, 18),
+        Position = UDim2.fromScale(0.5, 0.55),
+        AnchorPoint = Vector2.new(0.5, 0),
+        Color = UIStyles.Colors.TextSecondary,
+        TextSize = UIStyles.FontSizes.Tiny,
+        TextXAlignment = Enum.TextXAlignment.Center,
+        ZIndex = 32,
+        Parent = panel,
+    })
+
+    -- Rewards list
+    local rewardY = 0.62
+    for _, reward in ipairs(rewards) do
+        local rewardText = reward.icon and (reward.icon .. "  " .. reward.text) or reward.text
+        local rLabel = UIComponents.CreateTextLabel({
+            Name = "Reward_" .. tostring(_),
+            Text = "+ " .. rewardText,
+            Size = UDim2.fromOffset(260, 22),
+            Position = UDim2.fromScale(0.5, rewardY),
+            AnchorPoint = Vector2.new(0.5, 0),
+            Color = reward.color or UIStyles.Colors.Gold,
+            TextSize = UIStyles.FontSizes.Body,
+            TextXAlignment = Enum.TextXAlignment.Center,
+            ZIndex = 32,
+            Parent = panel,
+        })
+        rewardY += 0.07
+    end
+
+    -- Continue button
+    local continueBtn = UIComponents.CreateButton({
+        Name = "ContinueBtn",
+        Text = "CONTINUE",
+        Size = UDim2.fromOffset(180, 48),
+        Position = UDim2.fromScale(0.5, 0.9),
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Color = UIStyles.Colors.Cyan,
+        TextColor = UIStyles.Colors.TextOnAccent,
+        FontSize = UIStyles.FontSizes.Body,
+        CornerRadius = 12,
+        Gradient = {UIStyles.Colors.Cyan, UIStyles.Colors.ElectricBlue},
+        Callback = function()
+            -- Animate out
+            panel:TweenSize(
+                UDim2.fromOffset(0, 0),
+                Enum.EasingDirection.Out,
+                Enum.EasingStyle.Quad,
+                0.3,
+                true,
+                function()
+                    overlay:Destroy()
+                end
+            )
+        end,
+        Parent = panel,
+    })
+
+    -- Animate panel in (scale-up)
+    panel.Size = UDim2.fromOffset(0, 0)
+    local inTween = panel:TweenSize(
+        UDim2.fromOffset(300, 440),
+        Enum.EasingDirection.Out,
+        Enum.EasingStyle.Back,
+        0.6,
+        true
+    )
+
+    -- Animate XP bar fill after panel appears
+    inTween.Completed:Wait()
+    task.wait(0.2)
+    TweenService:Create(xpFill, TweenInfo.new(0.8, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+        Size = UDim2.fromScale(props.XPPercent or 0, 1)
+    }):Play()
+
+    -- Reward labels originally hidden, fade in
+    for i, child in ipairs(panel:GetChildren()) do
+        if child.Name:find("Reward_") then
+            child.TextTransparency = 1
+        end
+    end
+    task.delay(0.2, function()
+        for i, child in ipairs(panel:GetChildren()) do
+            if child.Name:find("Reward_") then
+                task.wait(0.15)
+                TweenService:Create(child, TweenInfo.new(0.3), {
+                    TextTransparency = 0
+                }):Play()
+            end
+        end
+    end)
+
+    return {
+        overlay = overlay,
+        panel = panel,
+        Destroy = function()
+            overlay:Destroy()
+        end
+    }
 end
 
 return UIComponents

@@ -19,6 +19,7 @@ local CollectionService = Knit.CreateService {
 }
 
 -- Creature definitions from CreatureService (shared reference)
+local Logger = require(game:GetService("ReplicatedStorage"):WaitForChild("KnitShared"):WaitForChild("Modules"):WaitForChild("Logger"))
 local CREATURE_DEFS = {
 	["clownfish"] = { Layer = 1 }, ["parrotfish"] = { Layer = 1 }, ["seahorse"] = { Layer = 1 },
 	["angelfish"] = { Layer = 1 }, ["tropical_ray"] = { Layer = 1 }, ["sea_turtle"] = { Layer = 1 },

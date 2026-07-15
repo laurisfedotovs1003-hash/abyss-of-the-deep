@@ -521,6 +521,7 @@ Config.Economy = {
     XPPerCreatureCaptured = 25,
     CreditsPerDepthMeter = 0.2, -- Balanced up from 0.1
     CreditsPerDiveComplete = 25, -- Balanced up from 10
+    XPScalingPerLevel = 0.02,   -- +2% XP per level (Level 50 = 2x XP, makes endgame achievable)
     ResearchPointsPerLevel = function(level) -- Scaling RP reward
         return 5 + math.floor(level / 5)
     end,
@@ -800,6 +801,286 @@ Config.DepthPass = {
         { level = 15, type = "ResearchPoints", amount = 25 },
         { level = 20, type = "Cosmetic",      item = "Season 1 Base Deco Set" },
         { level = 25, type = "Creature",      item = "Season 1 Exclusive Creature" },
+    },
+}
+
+-- ============================================================
+-- Quest System Configuration
+-- ============================================================
+
+Config.QuestSystem = {
+    MaxDailyQuests = 3,
+    MaxReRollsPerDay = 1,
+    ReRollCooldown = 1800,  -- 30 min between re-rolls
+}
+
+-- ============================================================
+-- Daily Quests (3 per day, refresh every 24h)
+-- ============================================================
+
+Config.DailyQuests = {
+    Daily_Catch5 = {
+        Name = "Catch 5 Creatures",
+        Description = "Catch any 5 creatures during a dive",
+        Type = "Daily",
+        Condition = { type = "CreatureCaught", count = 5 },
+        Rewards = { Credits = 30 },
+        XP_Reward = 50,
+        Difficulty = "Easy",
+    },
+    Daily_Dive200m = {
+        Name = "Descend 200 Meters",
+        Description = "Reach a depth of 200 meters in a single dive",
+        Type = "Daily",
+        Condition = { type = "DepthUpdate", threshold = 200 },
+        Rewards = { Credits = 40 },
+        XP_Reward = 75,
+        Difficulty = "Easy",
+    },
+    Daily_SellCreatures = {
+        Name = "Sell 3 Creatures",
+        Description = "Sell 3 creatures from your collection",
+        Type = "Daily",
+        Condition = { type = "CreatureSold", count = 3 },
+        Rewards = { Credits = 25 },
+        XP_Reward = 50,
+        Difficulty = "Easy",
+    },
+    Daily_CatchUncommon = {
+        Name = "Catch an Uncommon Creature",
+        Description = "Catch a creature of Uncommon rarity or higher",
+        Type = "Daily",
+        Condition = { type = "CreatureCaught", rarity = "Uncommon", count = 1 },
+        Rewards = { Credits = 50 },
+        XP_Reward = 100,
+        Difficulty = "Medium",
+    },
+    Daily_Dive500m = {
+        Name = "Deep Dive",
+        Description = "Reach a depth of 500 meters in a single dive",
+        Type = "Daily",
+        Condition = { type = "DepthUpdate", threshold = 500 },
+        Rewards = { Credits = 60 },
+        XP_Reward = 125,
+        Difficulty = "Medium",
+    },
+    Daily_UseOxygenTank = {
+        Name = "Emergency Refill",
+        Description = "Use an Emergency Oxygen Tank while diving",
+        Type = "Daily",
+        Condition = { type = "UseItem", item = "OxygenTank", count = 1 },
+        Rewards = { Credits = 15 },
+        XP_Reward = 25,
+        Difficulty = "Easy",
+    },
+}
+
+-- ============================================================
+-- Milestone Quests (one-time, progression-gated)
+-- ============================================================
+
+Config.MilestoneQuests = {
+    Milestone_FirstDive = {
+        Name = "First Dive",
+        Description = "Complete your first dive and return to the surface",
+        Condition = { type = "DiveComplete", minDepth = 1 },
+        Rewards = { Credits = 50, ResearchPoints = 2 },
+        XP_Reward = 100,
+        Order = 1,
+    },
+    Milestone_ReachTwilight = {
+        Name = "Into the Twilight",
+        Description = "Reach the Twilight Zone (200m depth)",
+        Condition = { type = "DepthUpdate", threshold = 200 },
+        Rewards = { Credits = 100, ResearchPoints = 3 },
+        XP_Reward = 200,
+        Order = 2,
+    },
+    Milestone_BuyScuba = {
+        Name = "Better Equipment",
+        Description = "Purchase your first gear upgrade (Scuba Kit)",
+        Condition = { type = "GearPurchased", tier = 2 },
+        Rewards = { Credits = 75 },
+        XP_Reward = 150,
+        Order = 3,
+    },
+    Milestone_ReachMidnight = {
+        Name = "Darkness Falls",
+        Description = "Reach the Midnight Zone (1,000m depth)",
+        Condition = { type = "DepthUpdate", threshold = 1000 },
+        Rewards = { Credits = 200, ResearchPoints = 5 },
+        XP_Reward = 400,
+        Order = 4,
+    },
+    Milestone_CatchRare = {
+        Name = "Rare Find",
+        Description = "Catch your first Rare creature",
+        Condition = { type = "CreatureCaught", rarity = "Rare", count = 1 },
+        Rewards = { Credits = 150 },
+        XP_Reward = 300,
+        Order = 5,
+    },
+    Milestone_ReachAbyss = {
+        Name = "Into the Abyss",
+        Description = "Reach the Abyssal Zone (4,000m depth)",
+        Condition = { type = "DepthUpdate", threshold = 4000 },
+        Rewards = { Credits = 500, ResearchPoints = 10 },
+        XP_Reward = 750,
+        Order = 6,
+    },
+    Milestone_CatchEpic = {
+        Name = "Epic Discovery",
+        Description = "Catch your first Epic creature",
+        Condition = { type = "CreatureCaught", rarity = "Epic", count = 1 },
+        Rewards = { Credits = 400, ResearchPoints = 5 },
+        XP_Reward = 500,
+        Order = 7,
+    },
+    Milestone_ReachTrench = {
+        Name = "The Deepest Place",
+        Description = "Reach the Trenches (6,000m depth)",
+        Condition = { type = "DepthUpdate", threshold = 6000 },
+        Rewards = { Credits = 1000, ResearchPoints = 15 },
+        XP_Reward = 1000,
+        Order = 8,
+    },
+    Milestone_CatchLegendary = {
+        Name = "Legendary Hunter",
+        Description = "Catch your first Legendary creature",
+        Condition = { type = "CreatureCaught", rarity = "Legendary", count = 1 },
+        Rewards = { Credits = 1000, ResearchPoints = 20 },
+        XP_Reward = 1500,
+        Order = 9,
+    },
+    Milestone_BuildHabitat = {
+        Name = "Home in the Deep",
+        Description = "Place your first Habitat module",
+        Condition = { type = "ModulePlaced", moduleType = "Habitat", count = 1 },
+        Rewards = { Credits = 200 },
+        XP_Reward = 300,
+        Order = 10,
+    },
+    Milestone_CompleteZone = {
+        Name = "Master Collector",
+        Description = "Catch all creatures in a single zone",
+        Condition = { type = "ZoneComplete", zoneIndex = 1 },
+        Rewards = { Credits = 500, ResearchPoints = 10 },
+        XP_Reward = 1000,
+        Order = 11,
+    },
+}
+
+-- ============================================================
+-- Event Quests (triggered by Anomaly events)
+-- ============================================================
+
+Config.EventQuests = {
+    Event_CatchInAnomaly = {
+        Name = "Anomaly Hunter",
+        Description = "Catch 3 creatures during an anomaly event",
+        Type = "Event",
+        TriggerEvent = "any",
+        Condition = { type = "CreatureCaught", duringAnomaly = true, count = 3 },
+        Rewards = { Credits = 100, ResearchPoints = 3 },
+        XP_Reward = 200,
+        Duration = 600,
+    },
+    Event_CatchLegendaryInAnomaly = {
+        Name = "Legendary Sighting",
+        Description = "Catch a Legendary creature during an anomaly",
+        Type = "Event",
+        TriggerEvent = "AncientMigration",
+        Condition = { type = "CreatureCaught", rarity = "Legendary", duringAnomaly = true, count = 1 },
+        Rewards = { Credits = 500, ResearchPoints = 15 },
+        XP_Reward = 1000,
+        Duration = 900,
+    },
+    Event_SurviveAnomaly = {
+        Name = "Weather the Storm",
+        Description = "Survive an anomaly event without surfacing",
+        Type = "Event",
+        TriggerEvent = "AbyssalSurge",
+        Condition = { type = "SurviveAnomaly", duration = 60 },
+        Rewards = { Credits = 200, ResearchPoints = 5 },
+        XP_Reward = 400,
+        Duration = 300,
+    },
+}
+
+-- ============================================================
+-- Achievements (long-term, collection-based)
+-- ============================================================
+
+Config.Achievements = {
+    Achievement_10Species = {
+        Name = "Species Collector",
+        Description = "Catch 10 different species",
+        Condition = { type = "UniqueSpecies", count = 10 },
+        Rewards = { Credits = 500, ResearchPoints = 5 },
+        XP_Reward = 1000,
+    },
+    Achievement_20Species = {
+        Name = "Oceanographer",
+        Description = "Catch 20 different species",
+        Condition = { type = "UniqueSpecies", count = 20 },
+        Rewards = { Credits = 1500, ResearchPoints = 15 },
+        XP_Reward = 2000,
+    },
+    Achievement_AllSpecies = {
+        Name = "Abyssal Professor",
+        Description = "Catch ALL species",
+        Condition = { type = "UniqueSpecies", count = 26 },
+        Rewards = { Credits = 5000, ResearchPoints = 50 },
+        XP_Reward = 5000,
+    },
+    Achievement_100Dives = {
+        Name = "Century Diver",
+        Description = "Complete 100 dives",
+        Condition = { type = "DiveComplete", count = 100 },
+        Rewards = { Credits = 1000, ResearchPoints = 10 },
+        XP_Reward = 2000,
+    },
+    Achievement_500Dives = {
+        Name = "Deep Sea Veteran",
+        Description = "Complete 500 dives",
+        Condition = { type = "DiveComplete", count = 500 },
+        Rewards = { Credits = 5000, ResearchPoints = 25 },
+        XP_Reward = 5000,
+    },
+    Achievement_10000Credits = {
+        Name = "Wealthy Diver",
+        Description = "Earn a total of 10,000 Credits",
+        Condition = { type = "TotalCreditsEarned", count = 10000 },
+        Rewards = { Credits = 1000, ResearchPoints = 5 },
+        XP_Reward = 1000,
+    },
+    Achievement_1MCredits = {
+        Name = "Billionaire of the Deep",
+        Description = "Earn a total of 1,000,000 Credits",
+        Condition = { type = "TotalCreditsEarned", count = 1000000 },
+        Rewards = { Credits = 25000, ResearchPoints = 100 },
+        XP_Reward = 10000,
+    },
+    Achievement_BuildAllModules = {
+        Name = "Base Architect",
+        Description = "Place all base module types",
+        Condition = { type = "AllModuleTypesPlaced", count = 1 },
+        Rewards = { Credits = 1000, ResearchPoints = 10 },
+        XP_Reward = 2000,
+    },
+    Achievement_SurviveAllAnomalies = {
+        Name = "Anomaly Survivor",
+        Description = "Survive each type of anomaly at least once",
+        Condition = { type = "AllAnomaliesSurvived", count = 1 },
+        Rewards = { Credits = 2000, ResearchPoints = 20 },
+        XP_Reward = 3000,
+    },
+    Achievement_TotalXP100K = {
+        Name = "Master Diver",
+        Description = "Earn 100,000 total XP",
+        Condition = { type = "TotalXP", count = 100000 },
+        Rewards = { Credits = 5000, ResearchPoints = 30 },
+        XP_Reward = 5000,
     },
 }
 

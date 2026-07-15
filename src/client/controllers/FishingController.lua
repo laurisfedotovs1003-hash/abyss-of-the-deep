@@ -84,10 +84,13 @@ end
 -- ============================================================
 
 function FishingController:CreateTools()
+    local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+    local tooltipSuffix = isMobile and " (tap)" or " (click)"
+    
     -- Create Fishing Rod Tool
     local rod = Instance.new("Tool")
     rod.Name = "Fishing Rod"
-    rod.ToolTip = "Cast your line into the depths"
+    rod.ToolTip = "Cast your line into the depths" .. tooltipSuffix
     rod.RequiresHandle = false
     rod.CanBeDropped = false
     rod.Parent = localPlayer:WaitForChild("Backpack")

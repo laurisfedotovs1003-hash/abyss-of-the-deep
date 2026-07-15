@@ -9,6 +9,9 @@ local UIStyles = require(script.Parent.Parent.ui.UIStyles)
 local UIComponents = require(script.Parent.Parent.ui.UIComponents)
 local ShopScreen = require(script.Parent.Parent.ui.screens.ShopScreen)
 local InventoryScreen = require(script.Parent.Parent.ui.screens.InventoryScreen)
+local SettingsScreen = require(script.Parent.Parent.ui.screens.SettingsScreen)
+local QuestScreen = require(script.Parent.Parent.ui.screens.QuestScreen)
+local TutorialOverlay = require(script.Parent.Parent.ui.screens.TutorialOverlay)
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
@@ -53,6 +56,7 @@ local cachedHUD = {}             -- HUD element references
 local cachedScreens = {}         -- Full screen containers
 local cachedBars = {}            -- Progress bar references for updates
 local activePopups = {}          -- Active popup/notification refs
+local cachedTutorial = nil       -- Tutorial overlay instance
 
 -- Local player reference
 local localPlayer = Players.LocalPlayer
@@ -188,12 +192,68 @@ function UIController:RegisterServiceListeners()
             end
         end
 
+    -- Quest service signals
+    local QuestService = Knit.GetService("QuestService")
+    if QuestService then
+        QuestService.Client:Get("QuestProgressUpdated"):Connect(function(data)
+            -- Optional: show subtle toast when progress changes
+        end)
+
+        QuestService.Client:Get("QuestCompleted"):Connect(function(data)
+            if data and data.questName then
+                self:ShowGameMessage("🎯 Quest Complete: " .. data.questName .. "!")
+            end
+        end)
+
+        QuestService.Client:Get("DailyQuestRefresh"):Connect(function(data)
+            self:ShowGameMessage("📅 Daily quests refreshed! Check your quests.")
+        end)
+
+        QuestService.Client:Get("EventQuestStarted"):Connect(function(data)
+            if data and data.questName then
+                self:ShowGameMessage("⚡ Event Quest: " .. data.questName .. " is now active!")
+            end
+        end)
+    end
+
+    -- Tutorial service signals
+    local TutorialService = Knit.GetService("TutorialService")
+    if TutorialService then
+        TutorialService.Client:Get("TutorialStepStarted"):Connect(function(data)
+            if data and data.step then
+                self:ShowTutorialStep(data)
+            end
+        end)
+
+        TutorialService.Client:Get("TutorialStepCompleted"):Connect(function(data)
+            if data and data.step then
+                self:ShowTutorialStepComplete(data)
+            end
+        end)
+
+        TutorialService.Client:Get("TutorialCompleted"):Connect(function(data)
+            self:ShowGameMessage("🎉 " .. (data and data.message or "Tutorial complete!"))
+            if cachedTutorial and cachedTutorial.Hide then
+                cachedTutorial.Hide()
+            end
+        end)
+    end
+end
+
 -- ============================================================
--- SCREEN MANAGEMENT
+-- SCREEN MANAGEMENT (with animated transitions)
 -- ============================================================
 
 function UIController:ShowScreen(screenName)
     if currentScreen == screenName then return end
+
+    -- Animated transition effect
+    local transition = UIComponents.CreateScreenTransition({
+        Direction = "fade",
+        Duration = 0.15,
+        Parent = mainHolder,
+    })
+    transition.FadeIn()
 
     -- Hide all screens
     self:HideAllScreens()
@@ -205,11 +265,26 @@ function UIController:ShowScreen(screenName)
         self:ShowShop()
     elseif screenName == "Collection" then
         self:ShowCollection()
+    elseif screenName == "Settings" then
+        self:ShowSettings()
     elseif screenName == "BaseEditor" then
         self:ShowBaseEditor()
     end
 
     currentScreen = screenName
+
+    -- End transition
+    task.delay(0.1, function()
+        transition.FadeOut(function()
+            transition.Destroy()
+        end)
+    end)
+
+    -- Audio hook for screen change
+    local AudioController = Knit.GetController("AudioController")
+    if AudioController then
+        AudioController:PlayUIClick()
+    end
 end
 
 function UIController:PushScreen(screenName)
@@ -529,6 +604,21 @@ function UIController:BuildHUD()
     })
     journalBtn.Position = UDim2.fromScale(0.5, 0.74)
 
+    -- Settings button (gear icon at top-right)
+    local settingsBtn = UIComponents.CreateIconButton({
+        Name = "SettingsButton",
+        Icon = "⚙",
+        Color = UIStyles.Colors.TextMuted,
+        StrokeColor = UIStyles.Colors.Border,
+        Callback = function()
+            self:PushScreen("Settings")
+        end,
+        Parent = hudContainer,
+    })
+    settingsBtn.Position = UDim2.new(1, -52, 0, 16)
+    settingsBtn.Size = UDim2.fromOffset(36, 36)
+    cachedHUD.settingsBtn = settingsBtn
+
     -- ================================================================
     -- 7. BOTTOM-CENTER: Primary Action Button (Dive/Surface)
     -- ================================================================
@@ -735,10 +825,9 @@ function UIController:UpdateEconomyDisplay(data)
     local level = data.Level or data.level or 1
     local xpNeeded = data.XPNeeded or 0
 
-    -- Scrap and Crystal are stored in the inventory or could come as separate fields
+    -- Scrap and Crystal are stored in the inventory
     local scrap = data.Scrap or 0
     local crystal = data.Crystal or 0
-    -- Also check inventory for scrap/crystal counts
     if data.Inventory then
         scrap = data.Inventory.Scrap or data.Inventory.scrap or scrap
         crystal = data.Inventory.Crystal or data.Inventory.crystal or crystal
@@ -755,25 +844,72 @@ function UIController:UpdateEconomyDisplay(data)
         return formatted
     end
 
+    -- Animate currency change with count-up effect
+    local function AnimatedCurrencyUpdate(textLabel, newValue)
+        if not textLabel then return end
+        local currentText = textLabel.Text
+        local currentNum = tonumber(currentText:gsub(",", "")) or 0
+        if currentNum == newValue then return end
+
+        -- Quick scale pulse on change
+        local scaleTween = TweenService:Create(textLabel,
+            TweenInfo.new(0.1, Enum.EasingStyle.Quad),
+            {TextTransparency = 0.3}
+        )
+        scaleTween:Play()
+        scaleTween.Completed:Wait()
+        
+        textLabel.Text = formatNum(newValue)
+        
+        TweenService:Create(textLabel,
+            TweenInfo.new(0.15, Enum.EasingStyle.Quad),
+            {TextTransparency = 0}
+        ):Play()
+    end
+
     if cachedHUD.credits then
-        cachedHUD.credits.Text = formatNum(credits)
+        AnimatedCurrencyUpdate(cachedHUD.credits, credits)
     end
 
     if cachedHUD.researchPoints then
-        cachedHUD.researchPoints.Text = formatNum(researchPoints)
+        AnimatedCurrencyUpdate(cachedHUD.researchPoints, researchPoints)
     end
 
-    -- Update Scrap display
     if cachedHUD.scrap then
-        cachedHUD.scrap.Text = formatNum(scrap)
-        -- Pulse green briefly on change
-        local currentText = cachedHUD.scrap.Text
+        AnimatedCurrencyUpdate(cachedHUD.scrap, scrap)
     end
 
-    -- Update Crystal display
     if cachedHUD.crystal then
-        cachedHUD.crystal.Text = formatNum(crystal)
+        AnimatedCurrencyUpdate(cachedHUD.crystal, crystal)
     end
+
+    -- Level-up detection: check if level changed from last known
+    if cachedHUD._lastLevel and cachedHUD._lastLevel < level then
+        -- Trigger level-up celebration
+        local diffLevels = level - cachedHUD._lastLevel
+        local xpPercent = xpNeeded > 0 and xp / xpNeeded or 0
+        
+        -- Build reward list from milestone data
+        local rewards = {}
+        for _, milestone in ipairs(Config.LevelMilestones or {}) do
+            if milestone.level >= cachedHUD._lastLevel + 1 and milestone.level <= level then
+                table.insert(rewards, {
+                    icon = "🏆",
+                    text = "Title: " .. milestone.title,
+                    color = UIStyles.Colors.Gold,
+                })
+            end
+        end
+        -- Generic level-up rewards
+        table.insert(rewards, {
+            icon = "🪙",
+            text = "Reward pending...",
+            color = UIStyles.Colors.Cyan,
+        })
+
+        self:ShowLevelUp(level, xpPercent, xp, rewards)
+    end
+    cachedHUD._lastLevel = level
 end
 
 -- ================================================================
@@ -879,6 +1015,103 @@ function UIController:ShowCollection()
             invAPI.UpdateProgress(result.totalUnique or 0, result.totalPossible or 1)
         end
     end
+end
+
+-- ================================================================
+-- SETTINGS SCREEN
+-- ================================================================
+
+function UIController:ShowSettings()
+    if cachedScreens.Settings and cachedScreens.Settings.Enabled then
+        cachedScreens.Settings.Enabled = true
+        return
+    end
+
+    local container = CreateScreenContainer("SettingsUI")
+    container.DisplayOrder = 10
+    cachedScreens.Settings = container
+
+    -- Build the settings screen
+    local settingsAPI = SettingsScreen.Create(container)
+
+    -- Wire close button
+    local closeBtn = UIComponents.CreateIconButton({
+        Icon = "✕", Size = 36, Color = UIStyles.Colors.Elevated,
+        StrokeColor = UIStyles.Colors.Border,
+        Position = UDim2.new(1, -20, 0, 20), AnchorPoint = Vector2.new(1, 0),
+        Callback = function() self:PopScreen() end,
+        Parent = container,
+    })
+end
+
+-- ================================================================
+-- QUEST SCREEN
+-- ================================================================
+
+function UIController:ShowQuestScreen()
+    if cachedScreens.Quest and cachedScreens.Quest.Enabled then
+        cachedScreens.Quest.Enabled = true
+        return
+    end
+
+    local container = CreateScreenContainer("QuestUI")
+    container.DisplayOrder = 5
+    cachedScreens.Quest = container
+
+    local questAPI = QuestScreen.Create(container)
+
+    -- Close button
+    local closeBtn = UIComponents.CreateIconButton({
+        Icon = "✕", Size = 36, Color = UIStyles.Colors.Elevated,
+        StrokeColor = UIStyles.Colors.Border,
+        Position = UDim2.new(1, -20, 0, 20), AnchorPoint = Vector2.new(1, 0),
+        Callback = function() self:PopScreen() end,
+        Parent = container,
+    })
+
+    -- Fetch initial quest data
+    local QuestService = Knit.GetService("QuestService")
+    if QuestService and QuestService.Client then
+        local ok, result = pcall(function()
+            return QuestService.Client:Get("GetAvailableQuests"):Fire()
+        end)
+        if ok and result and result.reRollCooldown then
+            questAPI.UpdateRefreshTimer(result.reRollCooldown)
+        end
+    end
+end
+
+-- ================================================================
+-- TUTORIAL OVERLAY
+-- ================================================================
+
+function UIController:ShowTutorialStep(data)
+    if not data then return end
+
+    -- Initialize tutorial overlay on first call
+    if not cachedTutorial then
+        cachedTutorial = TutorialOverlay.Create(mainHolder)
+        cachedTutorial.OnComplete(function()
+            cachedTutorial = nil
+            self:ShowGameMessage("🎉 Tutorial complete! The depths await!")
+        end)
+        cachedTutorial.OnSkip(function()
+            cachedTutorial = nil
+            self:ShowGameMessage("Tutorial skipped — you can always replay from settings.")
+        end)
+    end
+
+    cachedTutorial.Show(data.step, data)
+end
+
+function UIController:ShowTutorialStepComplete(data)
+    if not data or not cachedTutorial then return end
+
+    cachedTutorial.ShowStepComplete(
+        data.completionMessage,
+        data.rewardType,
+        data.rewardAmount
+    )
 end
 
 -- ================================================================
@@ -1058,8 +1291,30 @@ function UIController:ShowCatchResult(data)
     local success = data.success or false
 
     if success then
-        self:ShowGameMessage("🎉 Caught! " .. (data.name or "Creature") .. " — ★" .. tostring(data.sellPrice or 0))
+        -- Play VFX effect for the catch
+        local VFXController = Knit.GetController("VFXController")
+        if VFXController and VFXController.PlayFishingCatchEffect then
+            local playerChar = localPlayer.Character
+            local rootPart = playerChar and playerChar:FindFirstChild("HumanoidRootPart")
+            local pos = rootPart and rootPart.Position or Vector3.new(0, 0, 0)
+            VFXController:PlayFishingCatchEffect(pos, data.rarity or data.creature and data.creature.rarity, data.creature and data.creature.isShiny)
+        end
+
+        -- Audio hook
+        local AudioController = Knit.GetController("AudioController")
+        if AudioController then
+            AudioController:PlaySFX("CreatureCaught")
+        end
+
+        -- Game message with creature name
+        self:ShowGameMessage("🎉 Caught! " .. (data.name or data.creature and data.creature.displayName or "Creature") .. " — ★" .. tostring(data.sellPrice or 0))
     else
+        -- Escape sound
+        local AudioController = Knit.GetController("AudioController")
+        if AudioController then
+            AudioController:PlaySFX("CreatureEscape")
+        end
+
         self:ShowGameMessage("💨 It got away! Try again.")
     end
 end
@@ -1155,24 +1410,60 @@ function UIController:ShowAnomalyWarning(data)
     end)
 end
 
+-- ================================================================
+-- Level-Up Celebration Screen
+-- ================================================================
+
+function UIController:ShowLevelUp(level, xpPercent, xpRemaining, rewards)
+    -- Play VFX level-up particles
+    local VFXController = Knit.GetController("VFXController")
+    if VFXController and VFXController.PlayLevelUpEffect then
+        VFXController:PlayLevelUpEffect(level)
+    end
+
+    -- Play audio
+    local AudioController = Knit.GetController("AudioController")
+    if AudioController then
+        AudioController:PlaySFX("LevelUp")
+    end
+
+    -- Show celebration UI
+    local levelUpUI = UIComponents.CreateLevelUpScreen({
+        Level = level,
+        XPPercent = xpPercent,
+        XPRemaining = xpRemaining,
+        Rewards = rewards,
+        Parent = mainHolder,
+    })
+
+    -- Store reference for cleanup
+    activePopups.levelUp = levelUpUI
+end
+
+-- ================================================================
+-- Anomaly Escalation UI
+-- ================================================================
+
 function UIController:ShowAnomalyActive(data)
     if not data then return end
-    
+
     -- Clear warning banner if still visible
     if activeAnomalyBanner and activeAnomalyBanner.Parent then
         activeAnomalyBanner:Destroy()
         activeAnomalyBanner = nil
     end
-    
+
     -- Show active anomaly banner
     local desc = data.description or ""
     local duration = data.duration or 60
     local endsAt = data.endsAt or (os.time() + duration)
-    
+    local startedAt = data.startedAt or os.time()
+    local totalDuration = duration
+
     local container = CreateScreenContainer("AnomalyActive")
     container.DisplayOrder = 19
     container.Name = "AnomalyActive"
-    
+
     -- Top banner with color based on anomaly priority
     local priorityColors = {
         [1] = Color3.fromRGB(180, 30, 30),    -- Corrupted: dark red
@@ -1182,7 +1473,7 @@ function UIController:ShowAnomalyActive(data)
         [5] = Color3.fromRGB(0, 180, 220),    -- Migration: cyan
     }
     local bannerColor = priorityColors[data.priority] or Color3.fromRGB(100, 100, 100)
-    
+
     local banner = New("Frame", {
         Name = "AnomalyActiveBanner",
         Size = UDim2.new(1, 0, 0, 0),
@@ -1191,7 +1482,7 @@ function UIController:ShowAnomalyActive(data)
         BackgroundTransparency = 0.2,
         Parent = container,
     })
-    
+
     -- Event name
     local nameLabel = UIComponents.CreateTextLabel({
         Name = "AnomalyName",
@@ -1205,8 +1496,8 @@ function UIController:ShowAnomalyActive(data)
         TextStrokeTransparency = 0.2,
         Parent = banner,
     })
-    
-    -- Duration timer
+
+    -- Duration timer with intensity escalation
     local timerLabel = UIComponents.CreateTextLabel({
         Name = "AnomalyTimer",
         Text = tostring(duration) .. "s remaining",
@@ -1218,18 +1509,18 @@ function UIController:ShowAnomalyActive(data)
         TextSize = 14,
         Parent = banner,
     })
-    
+
     -- Animate in
     banner.Size = UDim2.new(1, 0, 0, 0)
-    banner:TweenSize(
+    local inTween = banner:TweenSize(
         UDim2.new(1, 0, 0, 56),
         Enum.EasingDirection.Out,
         Enum.EasingStyle.Quart,
         0.5,
         true
     )
-    
-    -- Update timer every second
+
+    -- Update timer and intensity every second
     local heartbeat
     heartbeat = RunService.Heartbeat:Connect(function()
         if not container or not container.Parent then
@@ -1237,15 +1528,38 @@ function UIController:ShowAnomalyActive(data)
             return
         end
         local remaining = math.max(0, endsAt - os.time())
+        local elapsed = os.time() - startedAt
+        local progress = totalDuration > 0 and math.min(elapsed / totalDuration, 1) or 0
+
         if timerLabel and timerLabel.Parent then
             timerLabel.Text = string.format("%ds remaining — %s", remaining, desc)
         end
+
+        -- Escalate intensity: pulse the banner faster as anomaly progresses
+        local intensity = 0.5 + progress * 0.5
+        local pulseAlpha = 0.15 + math.sin(os.clock() * (2 + progress * 4)) * intensity * 0.1
+        banner.BackgroundTransparency = pulseAlpha
+
         if remaining <= 0 and heartbeat then
             heartbeat:Disconnect()
         end
     end)
-    
+
     activeAnomalyBanner = container
+
+    -- Notify VFXController of anomaly intensity
+    local VFXController = Knit.GetController("VFXController")
+    if VFXController and VFXController.SetAnomalyIntensity then
+        -- Update intensity every 2 seconds
+        local intensityThread = task.spawn(function()
+            while activeAnomalyBanner == container and container.Parent do
+                local elapsed = os.time() - startedAt
+                local progress = totalDuration > 0 and math.min(elapsed / totalDuration, 1) or 0
+                VFXController:SetAnomalyIntensity(progress)
+                task.wait(2)
+            end
+        end)
+    end
 end
 
 function UIController:ShowAnomalyEnded(data)

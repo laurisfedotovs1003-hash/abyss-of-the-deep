@@ -14,6 +14,7 @@ local ZoneService = Knit.CreateService {
 }
 
 -- Constants
+local Logger = require(game:GetService("ReplicatedStorage"):WaitForChild("KnitShared"):WaitForChild("Modules"):WaitForChild("Logger"))
 local WELL_RADIUS = 200
 local WELL_DEPTH_TOTAL = 4000 -- Covers Sunlight, Twilight, and Midnight
 local WALL_THICKNESS = 20
@@ -31,6 +32,12 @@ local animatedFishSchools = {}
 -- ============================================================
 
 function ZoneService:KnitStart()
+    -- Nil check: ensure workspace is valid
+    if not workspace then
+        warn("[ZoneService] Workspace unavailable — skipping map generation")
+        return
+    end
+    
     print("[ZoneService] Initialized — Building Alpha Map...")
 
     -- Setup Map Container
@@ -49,10 +56,11 @@ end
 -- ============================================================
 
 function ZoneService:BuildHubProps()
-    -- Add some structural buildings to the hub for a "Research Center" feel
-    local hubProps = Instance.new("Folder")
-    hubProps.Name = "HubProps"
-    hubProps.Parent = MapFolder
+    -- Nil check: ensure MapFolder exists
+    if not MapFolder then
+        warn("[ZoneService] MapFolder missing — skipping HubProps")
+        return
+    end
 
     -- Main Lab Building
     local lab = Instance.new("Part")
