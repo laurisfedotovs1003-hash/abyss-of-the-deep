@@ -171,6 +171,12 @@ end
 -- Encounter Management
 -- ============================================================
 
+-- Clean up player data on leave (prevents table leaks)
+function CreatureService:PlayerRemoving(player)
+    activeEncounteredCreatures[player.UserId] = nil
+    lastEncounterTime[player.UserId] = nil
+end
+
 function CreatureService:ProcessEncounters()
     local now = os.time()
     for userId, encounter in pairs(activeEncounteredCreatures) do

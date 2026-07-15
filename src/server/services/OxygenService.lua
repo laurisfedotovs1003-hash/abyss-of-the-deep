@@ -17,11 +17,11 @@ local OxygenService = Knit.CreateService {
 }
 
 -- Internal player state
-local playerOxygen = {} -- { [UserId] = { current: number, max: number, isDiving: bool } }
+local playerOxygen = {} -- { [UserId] = { current: number, max: number, isDiving: bool, tickCounter: number } }
 
 function OxygenService:KnitStart()
     print("[OxygenService] Initialized")
-    
+
     -- Core loop — oxygen drain every second
     while task.wait(1) do
         self:ProcessOxygenTick()
@@ -34,6 +34,7 @@ function OxygenService:PlayerAdded(player)
         current = Config.Player.MaxOxygen,
         max = Config.Player.MaxOxygen,
         isDiving = false,
+        tickCounter = 0,
     }
 end
 
@@ -61,13 +62,13 @@ function OxygenService:ProcessOxygenTick()
             -- Calculate drain rate based on depth layer
             local player = game:GetService("Players"):GetPlayerByUserId(userId)
             if not player then continue end
-            
+
             -- Get current depth from DepthService
             local DepthService = Knit.GetService("DepthService")
             local currentDepth = DepthService:GetPlayerDepth(player)
             local layerIndex = Util.DepthToLayerIndex(currentDepth)
             local layer = Config.DepthLayers[layerIndex]
-            
+
             -- Apply drain (modified by gear)
             local drain = layer.OxygenDrainRate
             local gearTier = DepthService:GetPlayerGearTier(player)
@@ -75,12 +76,13 @@ function OxygenService:ProcessOxygenTick()
             if gear then
                 drain = drain / gear.SpeedModifier
             end
-            
+
             data.current = math.max(0, data.current - drain)
-            
-            -- Check for critical oxygen
+            data.tickCounter = (data.tickCounter or 0) + 1
+
+            -- Check for critical oxygen — always send these immediately
             if data.current <= Config.Player.OxygenCriticalThreshold and data.current > 0 then
-                -- Send warning to client
+                -- Critical warning — send every tick
                 self.Client:Get("GetOxygenData"):Fire(player, {
                     current = data.current,
                     max = data.max,
@@ -90,8 +92,9 @@ function OxygenService:ProcessOxygenTick()
             elseif data.current <= 0 then
                 -- Player is out of oxygen — surface them
                 self:ForceSurface(player)
-            else
-                -- Normal update
+            elseif data.tickCounter % 3 == 0 then
+                -- Normal update — throttle to every 3rd tick (3s intervals)
+                -- Reduces network traffic by 66% for non-critical updates
                 self.Client:Get("GetOxygenData"):Fire(player, {
                     current = data.current,
                     max = data.max,

@@ -7,6 +7,8 @@ local Knit = Knit or require(game:GetService("ReplicatedStorage"):WaitForChild("
 local Config = require(game:GetService("ReplicatedStorage"):WaitForChild("KnitShared"):WaitForChild("Modules"):WaitForChild("Config"))
 local VFXUtil = require(game:GetService("ReplicatedStorage"):WaitForChild("KnitShared"):WaitForChild("Modules"):WaitForChild("VFXUtil"))
 local AnimatedEnvironment = require(game:GetService("ReplicatedStorage"):WaitForChild("KnitShared"):WaitForChild("Modules"):WaitForChild("AnimatedEnvironmentUtil"))
+-- UIStyles is in client/ui/ — load via the controller's script path
+local UIStyles = require(script.Parent.Parent.ui.UIStyles)
 
 local VFXController = Knit.CreateController {
     Name = "VFXController",
@@ -489,6 +491,229 @@ function VFXController:PlayCollectionEffect(position, color)
     task.delay(1, function()
         attachment:Destroy()
     end)
+end
+
+-- ================================================================
+-- Fishing Catch Effect
+-- ================================================================
+
+function VFXController:PlayFishingCatchEffect(position, rarity, isShiny)
+    -- Particle burst at catch position
+    local attachment = Instance.new("Attachment")
+    attachment.Position = position or Vector3.new(0, 0, 0)
+    attachment.Parent = workspace.Terrain
+
+    local rarityColor = VFXUtil.Colors.CyanGlow
+    if rarity == "Rare" then rarityColor = VFXUtil.Colors.ElectricBlue
+    elseif rarity == "Epic" then rarityColor = VFXUtil.Colors.DeepPurple
+    elseif rarity == "Legendary" then rarityColor = VFXUtil.Colors.Gold
+    end
+
+    if isShiny then
+        rarityColor = Color3.fromRGB(255, 200, 255) -- Shiny pink
+    end
+
+    local burst = Instance.new("ParticleEmitter")
+    burst.Texture = "rbxassetid://2442214466"
+    burst.Color = ColorSequence.new(rarityColor)
+    burst.Size = NumberSequence.new(0.3, 0)
+    burst.Lifetime = NumberRange.new(0.4, 0.8)
+    burst.Speed = NumberRange.new(8, 18)
+    burst.SpreadAngle = Vector2.new(180, 180)
+    burst.Rate = 0
+    burst.Parent = attachment
+    burst:Emit(rarity == "Legendary" and 40 or 20)
+
+    -- Light burst
+    local light = Instance.new("PointLight")
+    light.Color = rarityColor
+    light.Range = 20
+    light.Brightness = rarity == "Legendary" and 15 or 8
+    light.Parent = attachment
+
+    TweenService:Create(light, TweenInfo.new(0.6), {Brightness = 0}):Play()
+    task.delay(1, function() attachment:Destroy() end)
+
+    -- Screen flash for legendary
+    if rarity == "Legendary" or isShiny then
+        self:PlayScreenFlash(rarityColor, 0.3)
+    end
+
+    -- Audio hook
+    local AudioController = Knit.GetController("AudioController")
+    if AudioController then
+        AudioController:PlaySFX("CreatureCaught")
+    end
+end
+
+-- ================================================================
+-- Screen Flash
+-- ================================================================
+
+local screenFlash = nil
+
+function VFXController:PlayScreenFlash(color, duration)
+    local playerGui = Player:WaitForChild("PlayerGui")
+    if not screenFlash or not screenFlash.Parent then
+        local gui = Instance.new("ScreenGui")
+        gui.Name = "ScreenFlash"
+        gui.IgnoreGuiInset = true
+        gui.ResetOnSpawn = false
+        gui.DisplayOrder = 20
+        gui.Parent = playerGui
+
+        screenFlash = Instance.new("Frame")
+        screenFlash.Name = "Flash"
+        screenFlash.Size = UDim2.fromScale(1, 1)
+        screenFlash.BackgroundColor3 = color or Color3.new(1, 1, 1)
+        screenFlash.BackgroundTransparency = 1
+        screenFlash.BorderSizePixel = 0
+        screenFlash.Parent = gui
+    end
+
+    duration = duration or 0.2
+    screenFlash.BackgroundColor3 = color or Color3.new(1, 1, 1)
+    screenFlash.BackgroundTransparency = 0.5
+
+    TweenService:Create(screenFlash, TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+        BackgroundTransparency = 1
+    }):Play()
+end
+
+-- ================================================================
+-- Creature Unlock Effect
+-- ================================================================
+
+function VFXController:PlayCreatureUnlockEffect(creatureName, rarity)
+    -- Particle burst
+    self:PlayFishingCatchEffect(Vector3.new(0, 0, 0), rarity, false)
+
+    -- Screen flash
+    local rarityColor = UIStyles and UIStyles.RarityToColor(rarity) or VFXUtil.Colors.CyanGlow
+    self:PlayScreenFlash(rarityColor, 0.4)
+
+    -- Audio hook
+    local AudioController = Knit.GetController("AudioController")
+    if AudioController then
+        AudioController:PlaySFX("MilestoneReached")
+    end
+end
+
+-- ================================================================
+-- Level Up Celebration
+-- ================================================================
+
+local levelUpParticles = {}
+
+function VFXController:PlayLevelUpEffect(level)
+    -- Spawn confetti-like particles around the player
+    local character = Player.Character
+    if not character then return end
+
+    local rootPart = character:FindFirstChild("HumanoidRootPart")
+    if not rootPart then return end
+
+    local attachment = Instance.new("Attachment")
+    attachment.Name = "LevelUpAttachment"
+    attachment.Parent = rootPart
+
+    local emitter = Instance.new("ParticleEmitter")
+    emitter.Texture = "rbxassetid://2442214466"
+    emitter.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 215, 0)),  -- Gold
+        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 255, 255)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 229, 255)),  -- Cyan
+    })
+    emitter.Size = NumberSequence.new(0.5, 0)
+    emitter.Transparency = NumberSequence.new(0, 0.8)
+    emitter.Lifetime = NumberRange.new(1, 2.5)
+    emitter.Rate = 0
+    emitter.Speed = NumberRange.new(10, 25)
+    emitter.SpreadAngle = Vector2.new(180, 180)
+    emitter.VelocityInheritance = 0.3
+    emitter.RotSpeed = NumberRange.new(-180, 180)
+    emitter.RotType = Enum.ParticleRotationType.VelocityRelative
+    emitter.Parent = attachment
+    emitter:Emit(50)
+
+    -- Light burst
+    local light = Instance.new("PointLight")
+    light.Color = Color3.fromRGB(255, 215, 0)
+    light.Range = 30
+    light.Brightness = 20
+    light.Parent = attachment
+
+    TweenService:Create(light, TweenInfo.new(1.5), {Brightness = 0}):Play()
+
+    -- Cleanup
+    task.delay(3, function()
+        if attachment then attachment:Destroy() end
+    end)
+
+    table.insert(levelUpParticles, attachment)
+
+    -- Audio hook
+    local AudioController = Knit.GetController("AudioController")
+    if AudioController then
+        AudioController:PlaySFX("LevelUp")
+    end
+end
+
+-- ================================================================
+-- Anomaly Intensity Escalation
+-- ================================================================
+
+local anomalyIntensity = 0
+local anomalyProgress = 0
+
+function VFXController:SetAnomalyIntensity(progress)
+    -- progress: 0 = just started, 1 = about to end
+    anomalyProgress = progress
+    anomalyIntensity = 0.5 + progress * 0.5 -- Ramp from 0.5 to 1.0
+end
+
+function VFXController:GetAnomalyIntensity()
+    return anomalyIntensity
+end
+
+-- ================================================================
+-- Oxygen Critical Red Pulse
+-- ================================================================
+
+local oxygenPulseActive = false
+
+function VFXController:PlayOxygenCriticalPulse()
+    if oxygenPulseActive then return end
+    oxygenPulseActive = true
+
+    -- Red vignette pulse
+    self:PlayScreenFlash(Color3.fromRGB(255, 50, 50), 1.0)
+
+    -- Screen flash repeatedly
+    local flashThread = task.spawn(function()
+        while oxygenPulseActive do
+            task.wait(2.5)
+            if oxygenPulseActive then
+                self:PlayScreenFlash(Color3.fromRGB(255, 50, 50), 0.5)
+            end
+        end
+    end)
+end
+
+function VFXController:StopOxygenCriticalPulse()
+    oxygenPulseActive = false
+end
+
+-- ================================================================
+-- Depth Pressure Effect
+-- ================================================================
+
+function VFXController:UpdateDepthPressure(depth, maxDepth)
+    -- Interact with CameraController to set vignette intensity
+    local CameraController = Knit.GetController("CameraController")
+    if CameraController and CameraController.UpdateDepthVignette then
+        CameraController:UpdateDepthVignette(depth, maxDepth)
+    end
 end
 
 function VFXController:KnitStop()

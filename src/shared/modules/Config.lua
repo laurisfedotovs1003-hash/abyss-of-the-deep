@@ -702,6 +702,27 @@ Config.ShopItems = {
         EffectValue = 1800,
     },
     
+    -- Anomaly consumables
+    EmergencyBeacon = {
+        Name = "Emergency Beacon",
+        Description = "Teleports you to the surface instantly during an anomaly",
+        Category = "Consumable",
+        Price = 25,
+        PriceCurrency = "Credits",
+        Effect = "EmergencyTeleport",
+        MaxStack = 3,
+    },
+    AnomalyBait = {
+        Name = "Anomaly Lure",
+        Description = "Increases anomaly encounter chance by 50% for 10 minutes",
+        Category = "Consumable",
+        Price = 50,
+        PriceCurrency = "Credits",
+        Effect = "AnomalyAttract",
+        EffectValue = 600,
+        MaxStack = 5,
+    },
+    
     -- RP-exclusive permanent items (aspirational purchases)
     AbyssalBeacon = {
         Name = "Abyssal Beacon",
@@ -746,12 +767,14 @@ Config.ShopItems = {
 -- ============================================================
 
 Config.GamePasses = {
-    OxygenBooster = 0,            -- +100 base oxygen capacity
-    SpeedDiver = 0,                -- +20% swim speed
-    ExpandedCollection = 0,        -- Double collection slots
-    AbyssalPass = 0,               -- Access to exclusive trench content
-    ResearchPointsPack = 0,        -- Bonus Research Points
-    VIPStatus = 0,                 -- +25% Credits, +15% XP, +5 max O₂, VIP title
+    OxygenBooster = 0,            -- +100 base oxygen capacity (79 R$)
+    SpeedDiver = 0,               -- +20% swim speed (49 R$)
+    ExpandedCollection = 0,       -- Double collection slots (99 R$)
+    AbyssalPass = 0,              -- Access to exclusive trench content (199 R$)
+    ResearchPointsPack = 0,       -- Bonus Research Points (49 R$)
+    VIPStatus = 0,                -- +25% Credits, +15% XP, +5 max O2, VIP title (249 R$)
+    AnomalyScanner = 0,           -- See anomaly events 30s before they happen (49 R$)
+    AnomalyShield = 0,            -- Take 50% less damage during anomalies (79 R$)
 }
 
 -- ============================================================
@@ -785,13 +808,14 @@ Config.DepthPass = {
 -- ============================================================
 
 Config.DeveloperProducts = {
-    Credits_500 = 0,
-    Credits_2000 = 0,
-    Credits_10000 = 0,
-    ResearchPoints_10 = 0,
-    ResearchPoints_50 = 0,
-    ResearchPoints_250 = 0,
-    StarterPack = 0,
+    Credits_500 = 0,              -- 500 Credits (49 R$)
+    Credits_2000 = 0,             -- 2,000 Credits (149 R$)
+    Credits_10000 = 0,            -- 10,000 Credits (499 R$)
+    ResearchPoints_10 = 0,        -- 10 RP (49 R$)
+    ResearchPoints_50 = 0,        -- 50 RP (199 R$)
+    ResearchPoints_250 = 0,       -- 250 RP (799 R$)
+    StarterPack = 0,              -- 200 Cr + 10 RP + items (99 R$)
+    AnomalyPass = 0,              -- Anomaly content micro-pass, 2 weeks (149 R$)
 }
 
 -- ============================================================
