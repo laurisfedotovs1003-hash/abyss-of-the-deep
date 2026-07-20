@@ -593,18 +593,18 @@ function UIController:BuildHUD()
     })
     invBtn.Position = UDim2.fromScale(0.5, 0.37)
 
-    -- Journal button (future feature)
-    local journalBtn = UIComponents.CreateIconButton({
-        Name = "JournalButton",
-        Icon = "📖",
-        Color = UIStyles.Colors.Gold,
-        StrokeColor = UIStyles.Colors.Gold,
+    -- Quests button
+    local questsBtn = UIComponents.CreateIconButton({
+        Name = "QuestsButton",
+        Icon = "📋",
+        Color = UIStyles.Colors.BioGreen,
+        StrokeColor = UIStyles.Colors.BioGreen,
         Callback = function()
-            self:ShowGameMessage("Journal coming soon! 📖")
+            self:PushScreen("Quest")
         end,
         Parent = actionsFrame,
     })
-    journalBtn.Position = UDim2.fromScale(0.5, 0.74)
+    questsBtn.Position = UDim2.fromScale(0.5, 0.74)
 
     -- Settings button (gear icon at top-right)
     local settingsBtn = UIComponents.CreateIconButton({
