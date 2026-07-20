@@ -250,7 +250,6 @@ function UIComponents.CreateIconButton(props)
         end)
     end
 
-    local TweenService = game:GetService("TweenService")
     frame._button = button
     return frame
 end

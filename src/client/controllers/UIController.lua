@@ -269,6 +269,8 @@ function UIController:ShowScreen(screenName)
         self:ShowSettings()
     elseif screenName == "BaseEditor" then
         self:ShowBaseEditor()
+    elseif screenName == "Quest" then
+        self:ShowQuestScreen()
     end
 
     currentScreen = screenName
