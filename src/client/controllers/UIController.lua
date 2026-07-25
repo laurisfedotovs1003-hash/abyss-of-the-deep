@@ -12,6 +12,7 @@ local InventoryScreen = require(script.Parent.Parent.ui.screens.InventoryScreen)
 local SettingsScreen = require(script.Parent.Parent.ui.screens.SettingsScreen)
 local QuestScreen = require(script.Parent.Parent.ui.screens.QuestScreen)
 local TutorialOverlay = require(script.Parent.Parent.ui.screens.TutorialOverlay)
+local SocialScreen = require(script.Parent.Parent.ui.screens.SocialScreen)
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
@@ -238,6 +239,14 @@ function UIController:RegisterServiceListeners()
             end
         end)
     end
+
+    -- Leaderboard service signals
+    local LeaderboardService = Knit.GetService("LeaderboardService")
+    if LeaderboardService then
+        LeaderboardService.Client:Get("LeaderboardUpdated"):Connect(function(data)
+            -- Leaderboard data refreshed — no immediate toast needed
+        end)
+    end
 end
 
 -- ============================================================
@@ -271,6 +280,8 @@ function UIController:ShowScreen(screenName)
         self:ShowBaseEditor()
     elseif screenName == "Quest" then
         self:ShowQuestScreen()
+    elseif screenName == "Social" then
+        self:ShowSocialScreen()
     end
 
     currentScreen = screenName
@@ -582,29 +593,42 @@ function UIController:BuildHUD()
 
     -- Inventory button
     local invBtn = UIComponents.CreateIconButton({
-        Name = "InventoryButton",
-        Icon = "🎒",
-        Color = UIStyles.Colors.DeepPurple,
-        StrokeColor = UIStyles.Colors.DeepPurple,
-        Callback = function()
-            self:PushScreen("Collection")
-        end,
-        Parent = actionsFrame,
-    })
-    invBtn.Position = UDim2.fromScale(0.5, 0.37)
+            Name = "InventoryButton",
+            Icon = "🎒",
+            Color = UIStyles.Colors.DeepPurple,
+            StrokeColor = UIStyles.Colors.DeepPurple,
+            Callback = function()
+                self:PushScreen("Collection")
+            end,
+            Parent = actionsFrame,
+        })
+        invBtn.Position = UDim2.fromScale(0.5, 0.28)
 
-    -- Quests button
-    local questsBtn = UIComponents.CreateIconButton({
-        Name = "QuestsButton",
-        Icon = "📋",
-        Color = UIStyles.Colors.BioGreen,
-        StrokeColor = UIStyles.Colors.BioGreen,
-        Callback = function()
-            self:PushScreen("Quest")
-        end,
-        Parent = actionsFrame,
-    })
-    questsBtn.Position = UDim2.fromScale(0.5, 0.74)
+        -- Quests button
+        local questsBtn = UIComponents.CreateIconButton({
+            Name = "QuestsButton",
+            Icon = "📋",
+            Color = UIStyles.Colors.BioGreen,
+            StrokeColor = UIStyles.Colors.BioGreen,
+            Callback = function()
+                self:PushScreen("Quest")
+            end,
+            Parent = actionsFrame,
+        })
+        questsBtn.Position = UDim2.fromScale(0.5, 0.56)
+
+        -- Social button
+        local socialBtn = UIComponents.CreateIconButton({
+            Name = "SocialButton",
+            Icon = "👥",
+            Color = UIStyles.Colors.Gold,
+            StrokeColor = UIStyles.Colors.Gold,
+            Callback = function()
+                self:PushScreen("Social")
+            end,
+            Parent = actionsFrame,
+        })
+        socialBtn.Position = UDim2.fromScale(0.5, 0.84)
 
     -- Settings button (gear icon at top-right)
     local settingsBtn = UIComponents.CreateIconButton({
@@ -1114,6 +1138,31 @@ function UIController:ShowTutorialStepComplete(data)
         data.rewardType,
         data.rewardAmount
     )
+end
+
+-- ================================================================
+-- SOCIAL SCREEN
+-- ================================================================
+
+function UIController:ShowSocialScreen()
+    if cachedScreens.Social and cachedScreens.Social.Enabled then
+        cachedScreens.Social.Enabled = true
+        return
+    end
+
+    local container = CreateScreenContainer("SocialUI")
+    container.DisplayOrder = 5
+    cachedScreens.Social = container
+
+    local socialAPI = SocialScreen.Create(container)
+
+    local closeBtn = UIComponents.CreateIconButton({
+        Icon = "✕", Size = 36, Color = UIStyles.Colors.Elevated,
+        StrokeColor = UIStyles.Colors.Border,
+        Position = UDim2.new(1, -20, 0, 20), AnchorPoint = Vector2.new(1, 0),
+        Callback = function() self:PopScreen() end,
+        Parent = container,
+    })
 end
 
 -- ================================================================
