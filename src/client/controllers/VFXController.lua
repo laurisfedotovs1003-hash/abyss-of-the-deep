@@ -887,6 +887,76 @@ function VFXController:CreateBloodMoonVFX()
     })
 end
 
+-- ============================================================
+-- Gameplay VFX Hooks (for Fishing, Diving, Combat)
+-- ============================================================
+
+-- Slow-motion effect for legendary catches
+function VFXController:PlaySlowMotion(duration)
+    duration = duration or 0.5
+    RunService:SetTimeScale(0.3)
+    task.delay(duration, function()
+        RunService:SetTimeScale(1.0)
+    end)
+end
+
+-- Legendary creature gold-edge glow
+function VFXController:TriggerLegendaryGlow()
+    local playerGui = Player:WaitForChild("PlayerGui")
+    local vignette = Instance.new("Frame")
+    vignette.Name = "LegendaryGlow"
+    vignette.Size = UDim2.fromScale(1, 1)
+    vignette.BackgroundTransparency = 1
+    vignette.Parent = playerGui
+    
+    local edge = Instance.new("UIStroke")
+    edge.Color = Color3.fromRGB(255, 200, 50)
+    edge.Thickness = 12
+    edge.Transparency = 0.3
+    edge.Parent = vignette
+    
+    TweenService:Create(edge, TweenInfo.new(0.3, Enum.EasingStyle.Quad),
+        {Transparency = 0.7}):Play()
+    task.delay(2, function() vignette:Destroy() end)
+end
+
+-- Damage vignette when low HP/oxygen
+function VFXController:PlayDamageVignette()
+    local playerGui = Player:WaitForChild("PlayerGui")
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.fromScale(1, 1)
+    frame.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
+    frame.BackgroundTransparency = 1
+    frame.Parent = playerGui
+    
+    TweenService:Create(frame, TweenInfo.new(0.15, Enum.EasingStyle.Quad),
+        {BackgroundTransparency = 0.7}):Play()
+    TweenService:Create(frame, TweenInfo.new(0.4, Enum.EasingStyle.Quad),
+        {BackgroundTransparency = 1}):Play()
+    task.delay(0.6, function() frame:Destroy() end)
+end
+
+-- Bubble trail behind player (hook for DivingController)
+function VFXController:CreateBubbleTrail(character, intensity)
+    if not character then return end
+    local rootPart = character:FindFirstChild("HumanoidRootPart")
+    if not rootPart then return end
+    
+    local emitter = Instance.new("ParticleEmitter")
+    emitter.Texture = "rbxasset://textures/particles/smoke_main.dds"
+    emitter.Rate = math.floor(intensity * 6)
+    emitter.Lifetime = NumberRange.new(0.5, 1.5)
+    emitter.Speed = NumberRange.new(1, 3)
+    emitter.Size = NumberSequence.new(NumberSequenceKeypoint.new(0, 0.1), NumberSequenceKeypoint.new(1, 0.3))
+    emitter.Transparency = NumberSequence.new(NumberSequenceKeypoint.new(0, 0.3), NumberSequenceKeypoint.new(1, 0.9))
+    emitter.Color = ColorSequence.new(Color3.fromRGB(180, 220, 255))
+    emitter.SpreadAngle = Vector2.new(10, 10)
+    emitter.Parent = rootPart
+    
+    table.insert(activeTrails, emitter)
+    return emitter
+end
+
 function VFXController:KnitStop()
     RunService:UnbindFromRenderStep("VFXUpdate")
     RunService:UnbindFromRenderStep("ZoneVFXCheck")
