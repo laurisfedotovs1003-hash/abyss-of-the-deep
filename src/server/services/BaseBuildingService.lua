@@ -14,7 +14,7 @@ local Knit = Knit or require(game:GetService("ReplicatedStorage"):WaitForChild("
 local Config = require(game:GetService("ReplicatedStorage"):WaitForChild("KnitShared"):WaitForChild("Modules"):WaitForChild("Config"))
 
 local Logger = require(game:GetService("ReplicatedStorage"):WaitForChild("KnitShared"):WaitForChild("Modules"):WaitForChild("Logger"))
-local VALID_MODULES = { Habitat = true, Lab = true }
+local VALID_MODULES = { Habitat = true, Lab = true, CraftingTable = true, OxygenGenerator = true, CreaturePen = true, ResearchLab = true, TradingPost = true, TeleportBeacon = true }
 
 local BaseBuildingService = Knit.CreateService {
     Name = "BaseBuildingService",

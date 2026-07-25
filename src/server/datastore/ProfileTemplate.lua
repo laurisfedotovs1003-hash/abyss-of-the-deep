@@ -208,6 +208,23 @@ ProfileTemplate.Data = {
             EquippedTitle = "",            -- Current visible title above player name
 
             -- ============================================================
+            -- Trading & Marketplace
+            -- ============================================================
+
+            TradeHistory = {},
+            -- { { tradeId, partnerName, partnerUserId, gave: {CreatureEntry}, received: {CreatureEntry}, timestamp }, ... }
+
+            MarketListings = {},
+            -- { { Id, SellerUserId, SellerName, CreatureData, ListingType, Price, Currency,
+            --     BuyNowPrice, CurrentBid, BidderUserId, BidderName, Bids, AuctionEndTime, ListedAt, Status }, ... }
+
+            ActiveBids = {},
+            -- { [listingId] = { listingId, amount, creatureName, sellerName, placedAt } }
+
+            TradeReputation = 0,
+            -- Reputation score from successful trades
+
+            -- ============================================================
             -- Meta
             -- ============================================================
 
@@ -215,6 +232,6 @@ ProfileTemplate.Data = {
             FirstJoinTime = 0,            -- Set on first join
             TotalSessions = 0,
             PremiumBenefits = false,
-        }
+            }
 
 return ProfileTemplate

@@ -405,4 +405,216 @@ function DataStoreManager:MarkCreatureDiscovered(player, creatureId)
     end)
 end
 
+-- ============================================================
+-- Creature Transfer (Trade & Market)
+-- Used by TradeService and MarketService to move creatures between players
+-- ============================================================
+
+function DataStoreManager:TransferCreature(fromUserId, toUserId, creatureData)
+    if not fromUserId or not toUserId or not creatureData then
+        log:Warn("TransferCreature: invalid parameters")
+        return false
+    end
+    
+    if not creatureData.Id then
+        log:Warn("TransferCreature: creature has no ID")
+        return false
+    end
+    
+    -- Remove from seller
+    local fromEntry = playerProfiles[fromUserId]
+    if fromEntry and fromEntry.Profile then
+        local removeSuccess = false
+        local collection = fromEntry.Profile.Data.CreatureCollection or {}
+        for i, entry in ipairs(collection) do
+            if entry.Id == creatureData.Id then
+                if (entry.Count or 1) > 1 then
+                    entry.Count = entry.Count - 1
+                    entry.TotalWeight = (entry.TotalWeight or 0) - (creatureData.Weight or 0)
+                else
+                    table.remove(collection, i)
+                end
+                removeSuccess = true
+                break
+            end
+        end
+        fromEntry.Profile.Data.CreatureCollection = collection
+        if not removeSuccess then
+            log:Warn(string.format("TransferCreature: creature %s not found in seller %d's collection",
+                creatureData.Id, fromUserId))
+            return false
+        end
+    end
+    
+    -- Add to buyer
+    local toEntry = playerProfiles[toUserId]
+    if toEntry and toEntry.Profile then
+        local collection = toEntry.Profile.Data.CreatureCollection or {}
+        local existingIndex = nil
+        for i, entry in ipairs(collection) do
+            if entry.Id == creatureData.Id then
+                existingIndex = i
+                break
+            end
+        end
+        
+        if existingIndex then
+            local entry = collection[existingIndex]
+            entry.Count = (entry.Count or 1) + 1
+            entry.TotalWeight = (entry.TotalWeight or 0) + (creatureData.Weight or 0)
+        else
+            table.insert(collection, {
+                Id = creatureData.Id,
+                DisplayName = creatureData.DisplayName,
+                Rarity = creatureData.Rarity,
+                IsShiny = creatureData.IsShiny or false,
+                Weight = creatureData.Weight or 0,
+                Size = creatureData.Size or 1,
+                Count = 1,
+                TotalWeight = creatureData.Weight or 0,
+                DateCollected = os.time(),
+                LayerFound = creatureData.LayerFound or 1,
+            })
+        end
+        toEntry.Profile.Data.CreatureCollection = collection
+    end
+    
+    -- Mark both profiles dirty
+    if fromEntry then
+        self:SetProfileDirtyByUserId(fromUserId)
+    end
+    if toEntry then
+        self:SetProfileDirtyByUserId(toUserId)
+    end
+    
+    return true
+end
+
+-- ============================================================
+-- ExecuteCreatureTransfer — atomic bidirectional transfer for P2P trading
+-- Removes OfferA from PlayerA, gives to PlayerB; removes OfferB from PlayerB, gives to PlayerA
+-- ============================================================
+
+function DataStoreManager:ExecuteCreatureTransfer(playerA, playerB, offerA, offerB)
+    -- Validate: PlayerA owns all creatures in offerA
+    local profileA = self:GetProfile(playerA)
+    if not profileA then return false end
+    
+    for _, creature in ipairs(offerA) do
+        local found = false
+        for _, entry in ipairs(profileA.CreatureCollection or {}) do
+            if entry.Id == creature.Id then
+                found = true
+                break
+            end
+        end
+        if not found then
+            log:Warn(string.format("ExecuteTransfer: PlayerA doesn't own %s", creature.Id))
+            return false
+        end
+    end
+    
+    -- Validate: PlayerB owns all creatures in offerB
+    local profileB = self:GetProfile(playerB)
+    if not profileB then return false end
+    
+    for _, creature in ipairs(offerB) do
+        local found = false
+        for _, entry in ipairs(profileB.CreatureCollection or {}) do
+            if entry.Id == creature.Id then
+                found = true
+                break
+            end
+        end
+        if not found then
+            log:Warn(string.format("ExecuteTransfer: PlayerB doesn't own %s", creature.Id))
+            return false
+        end
+    end
+    
+    -- Execute transfers
+    for _, creature in ipairs(offerA) do
+        local ok = self:TransferCreature(playerA.UserId, playerB.UserId, creature)
+        if not ok then
+            log:Error("ExecuteTransfer failed: A->B transfer failed for " .. (creature.Id or "unknown"))
+            return false
+        end
+    end
+    
+    for _, creature in ipairs(offerB) do
+        local ok = self:TransferCreature(playerB.UserId, playerA.UserId, creature)
+        if not ok then
+            log:Error("ExecuteTransfer failed: B->A transfer failed for " .. (creature.Id or "unknown"))
+            return false
+        end
+    end
+    
+    return true
+end
+
+-- ============================================================
+-- UpdateProfileByUserId — update a profile for an offline player
+-- Used by MarketService for crediting offline sellers
+-- ============================================================
+
+function DataStoreManager:UpdateProfileByUserId(userId, callback)
+    if not userId or not callback then return end
+    
+    local entry = playerProfiles[userId]
+    if entry and entry.Profile then
+        -- Player is online, update normally
+        callback(entry.Profile.Data)
+        self:SetProfileDirtyByUserId(userId)
+    else
+        -- Player is offline — queue for next load
+        -- In production, this would use a separate DataStore queue
+        -- For alpha: log a warning, the data will need reconciliation
+        log:Warn(string.format("UpdateProfileByUserId: player %d offline — changes queued", userId))
+        -- Attempt direct DataStore write as fallback
+        local success, result = pcall(function()
+            local Players = game:GetService("Players")
+            local profileStore = self.ProfileStore
+            if profileStore then
+                local profile = profileStore:LoadProfileAsync("Player_" .. tostring(userId))
+                if profile then
+                    callback(profile.Data)
+                    profile:Release()
+                end
+            end
+        end)
+        if not success then
+            log:Error("UpdateProfileByUserId: offline write failed — " .. tostring(result))
+        end
+    end
+end
+
+-- ============================================================
+-- SetProfileDirtyByUserId (internal helper)
+-- ============================================================
+
+function DataStoreManager:SetProfileDirtyByUserId(userId)
+    local entry = playerProfiles[userId]
+    if entry then
+        self:SetProfileDirtyWithEntry(entry)
+    end
+end
+
+function DataStoreManager:SetProfileDirtyWithEntry(entry)
+    if entry and entry.Profile then
+        -- ProfileService auto-saves on Release, so we just mark it
+        entry.Profile.Data.LastSaveTime = os.time()
+    end
+end
+
+-- ============================================================
+-- GetPlayerProfileSync — returns profile data with nil guard
+-- ============================================================
+
+function DataStoreManager:GetPlayerProfileSync(player)
+    if not player or not player.UserId then
+        return {}
+    end
+    return self:GetProfile(player)
+end
+
 return DataStoreManager

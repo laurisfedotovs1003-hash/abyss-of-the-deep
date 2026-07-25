@@ -6,6 +6,7 @@
 local Knit = Knit or require(game:GetService("ReplicatedStorage"):WaitForChild("Packages"):WaitForChild("Knit"))
 local Config = require(game:GetService("ReplicatedStorage"):WaitForChild("KnitShared"):WaitForChild("Modules"):WaitForChild("Config"))
 local Util = require(game:GetService("ReplicatedStorage"):WaitForChild("KnitShared"):WaitForChild("Modules"):WaitForChild("Util"))
+local EnvConfig = require(game:GetService("ReplicatedStorage"):WaitForChild("KnitShared"):WaitForChild("Modules"):WaitForChild("EnvironmentConfig"))
 
 local CameraController = Knit.CreateController {
     Name = "CameraController",
@@ -23,6 +24,12 @@ local currentDepth = 0
 local targetFogColor = Color3.fromRGB(30, 144, 255)
 local targetFogEnd = 500
 local underwaterEffect = 0 -- 0 = surface, 1 = fully underwater
+
+-- Time of Day & Weather overlays
+local timeOfDayLighting = nil     -- Current time-of-day lighting table
+local weatherLighting = nil       -- Current weather lighting modifiers
+local weatherModifiers = nil      -- Current weather modifiers
+local savedTimeLighting = {}      -- Saved before anomaly overrides
 
 -- Active connections for cleanup
 local connections = {}
@@ -54,6 +61,25 @@ function CameraController:KnitStart()
         
         table.insert(connections, AnomalyService.Client:Get("AnomalyEnded"):Connect(function()
             self:RevertAnomalyLighting()
+        end))
+    end
+
+    -- Listen for time-of-day changes
+    local TimeService = Knit.GetService("TimeService")
+    if TimeService then
+        table.insert(connections, TimeService.Client:Get("TimeStateChanged"):Connect(function(data)
+            if data.lighting then
+                timeOfDayLighting = data.lighting
+            end
+        end))
+    end
+
+    -- Listen for weather changes
+    local WeatherService = Knit.GetService("WeatherService")
+    if WeatherService then
+        table.insert(connections, WeatherService.Client:Get("WeatherStateChanged"):Connect(function(data)
+            weatherLighting = data.lighting or {}
+            weatherModifiers = data.modifiers or {}
         end))
     end
     
@@ -105,11 +131,44 @@ function CameraController:UpdateCameraEffects(dt)
     local speed = dt * 2
     local Lighting = game:GetService("Lighting")
 
-    -- Update fog
-    Lighting.FogColor = Lighting.FogColor:Lerp(targetFogColor, speed)
-    Lighting.FogEnd = Util.Lerp(Lighting.FogEnd, targetFogEnd, speed)
+    -- Base fog from layer
+    local baseFogColor = targetFogColor
+    local baseFogEnd = targetFogEnd
 
-    -- Underwater blur / distortion effect
+    -- Blend time-of-day lighting into fog
+    if timeOfDayLighting then
+        baseFogColor = baseFogColor:Lerp(timeOfDayLighting.FogColor or baseFogColor, 0.5)
+        baseFogEnd = baseFogEnd * 0.7 + (timeOfDayLighting.FogEnd or baseFogEnd) * 0.3
+    end
+
+    -- Blend weather lighting into fog
+    if weatherLighting then
+        baseFogColor = baseFogColor:Lerp(weatherLighting.TintColor or baseFogColor, 0.3)
+        baseFogEnd = baseFogEnd * (weatherLighting.FogMultiplier or 1.0)
+
+        -- Weather ambient/brightness
+        local targetAmbient = baseFogColor:Lerp(Color3.new(0, 0, 0), 0.8)
+        targetAmbient = targetAmbient * (weatherLighting.AmbientMultiplier or 1.0)
+        Lighting.Ambient = Lighting.Ambient:Lerp(targetAmbient, speed)
+
+        local targetBrightness = (Config.DepthLayers[currentLayerIndex] and Config.DepthLayers[currentLayerIndex].Brightness or 1)
+        targetBrightness = targetBrightness * (weatherLighting.BrightnessMultiplier or 1.0)
+        Lighting.Brightness = Util.Lerp(Lighting.Brightness, targetBrightness, speed)
+    end
+
+    -- Apply fog
+    Lighting.FogColor = Lighting.FogColor:Lerp(baseFogColor, speed)
+    Lighting.FogEnd = Util.Lerp(Lighting.FogEnd, baseFogEnd, speed)
+
+    -- Night particle multiplier — pass to VFXController
+    if timeOfDayLighting and timeOfDayLighting.ParticleMultiplier then
+        local VFXController = Knit.GetController("VFXController")
+        if VFXController and VFXController.SetTimeOfDayMultiplier then
+            VFXController:SetTimeOfDayMultiplier(timeOfDayLighting.ParticleMultiplier or 1)
+        end
+    end
+
+    -- Depth progress
     local depthProgress = Util.DepthToProgress(currentDepth)
 end
 
