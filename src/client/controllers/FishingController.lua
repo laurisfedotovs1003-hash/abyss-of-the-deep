@@ -1,7 +1,8 @@
 --[[
-    FishingController — Client-side fishing rod mechanics
-    Manages tool creation, line casting, bite detection, and reel-in mini-game.
-    Communicates with ToolService and CreatureService via Knit client proxies.
+	FishingController — "Let's Fish" style snappy fishing mechanics
+	Full flow: Cast (parabolic arc) → Bobber (buoyancy + fish shadow) →
+	Bite (2s window) → Hook (rod bend, struggle) → Catch/Escape.
+	Mobile-optimized for smooth 60fps with minimal particle overhead.
 ]]
 
 local Knit = Knit or require(game:GetService("ReplicatedStorage"):WaitForChild("Packages"):WaitForChild("Knit"))
@@ -9,400 +10,564 @@ local Config = require(game:GetService("ReplicatedStorage"):WaitForChild("KnitSh
 local Util = require(game:GetService("ReplicatedStorage"):WaitForChild("KnitShared"):WaitForChild("Modules"):WaitForChild("Util"))
 
 local FishingController = Knit.CreateController {
-    Name = "FishingController",
+	Name = "FishingController",
 }
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
 local TweenService = game:GetService("TweenService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local localPlayer = Players.LocalPlayer
 
--- Rod tier configuration (must match ToolService's ROD_TIERS)
-local ROD_TIERS = {
-    Basic = { BiteTimeMin = 3, BiteTimeMax = 8, CatchBonus = 1.0, Price = 0 },
-    Advanced = { BiteTimeMin = 4, BiteTimeMax = 12, CatchBonus = 1.15, Price = 200 },
-    Master = { BiteTimeMin = 5, BiteTimeMax = 15, CatchBonus = 1.35, Price = 800 },
-    Legendary = { BiteTimeMin = 6, BiteTimeMax = 18, CatchBonus = 1.5, Price = 3000 },
+-- ============================================================
+-- State Machine: Idle → Casting → Floating → Biting → Hooking → Reeling → End
+-- ============================================================
+local STATE = {
+	IDLE = "Idle",
+	CASTING = "Casting",
+	FLOATING = "Floating",
+	BITING = "Biting",
+	HOOKING = "Hooking",
+	REELING = "Reeling",
+	ESCAPING = "Escaping",
 }
+local currentState = STATE.IDLE
 
--- State
-local currentRodTier = "Basic"
-local isCasting = false
-local isFishing = false
-local hasBite = false
-local reelWindowEnd = 0
-local biteCheckThread = nil
+-- Tool references
 local rodTool = nil
 local harvestTool = nil
 local divingGearTool = nil
 
--- Tool objects (created in KnitStart)
-local toolCache = {}
+-- Fishing state
+local waterSurfaceY = 0       -- Y position of water surface
+local castDistance = 30       -- Studs forward from player
+local bobberPart = nil        -- The bobber floating on water
+local lineAttachment = nil    -- Line from rod to bobber
+local fishShadow = nil        -- Underwater shadow approaching
+local currentRodTier = "Basic"
+local biteTimer = 0           -- When the bite will happen
+local biteWindowEnd = 0       -- 2-second window deadline
+local fishData = nil          -- What was caught
+
+-- Rod tier config
+local ROD_TIERS = {
+	Basic = { CastDist = 25, BiteMin = 3, BiteMax = 8, CatchBonus = 1.0 },
+	Advanced = { CastDist = 30, BiteMin = 4, BiteMax = 10, CatchBonus = 1.15 },
+	Master = { CastDist = 35, BiteMin = 5, BiteMax = 12, CatchBonus = 1.35 },
+	Legendary = { CastDist = 40, BiteMin = 6, BiteMax = 14, CatchBonus = 1.5 },
+}
 
 -- ============================================================
 -- Initialize
 -- ============================================================
 
 function FishingController:KnitStart()
-    print("[FishingController] Initialized — Rod, Diving Gear & Harvest tools ready")
-    
-    -- Listen for ToolService responses
-    local ToolService = Knit.GetService("ToolService")
-    if ToolService then
-        -- Fish bite notification
-        ToolService.Client:Get("FishBite"):Connect(function(data)
-            self:OnFishBite(data)
-        end)
-        
-        -- Fish result notification
-        ToolService.Client:Get("FishResult"):Connect(function(data)
-            self:OnFishResult(data)
-        end)
-        
-        -- Harvest result
-        ToolService.Client:Get("HarvestResult"):Connect(function(data)
-            self:OnHarvestResult(data)
-        end)
-        
-        -- Cast line response
-        ToolService.Client:Get("CastLine"):Connect(function(data)
-            if data.success then
-                self:StartBiteWait(data)
-            end
-        end)
-    end
-    
-    -- Create tool instances
-    self:CreateTools()
+	print("[FishingController] Snappy Let's Fish mechanics ready")
+	
+	-- Create tools in Backpack
+	self:CreateTools()
+	
+	-- Find water surface Y
+	self:FindWaterSurface()
+	
+	-- Listen for ToolService responses
+	local ToolService = Knit.GetService("ToolService")
+	if ToolService then
+		ToolService.Client:Get("FishBite"):Connect(function(data)
+			self:OnFishBite(data)
+		end)
+		ToolService.Client:Get("FishResult"):Connect(function(data)
+			self:OnFishResult(data)
+		end)
+		ToolService.Client:Get("CastLine"):Connect(function(data)
+			if data.success then
+				self:StartBiteWait(data)
+			end
+		end)
+		ToolService.Client:Get("HarvestResult"):Connect(function(data)
+			self:OnHarvestResult(data)
+		end)
+	end
+end
+
+function FishingController:FindWaterSurface()
+	-- Water surface is at Y=0 by convention
+	waterSurfaceY = 0
+	-- Look for a part named "WaterSurface" if it exists
+	local water = Workspace:FindFirstChild("WaterSurface")
+	if water then
+		waterSurfaceY = water.Position.Y
+	end
 end
 
 -- ============================================================
--- Tool Creation
+-- Tool Creation (mobile-friendly: uses Activated = works on touch)
 -- ============================================================
 
 function FishingController:CreateTools()
-    local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
-    local tooltipSuffix = isMobile and " (tap)" or " (click)"
-    
-    -- Create Fishing Rod Tool
-    local rod = Instance.new("Tool")
-    rod.Name = "Fishing Rod"
-    rod.ToolTip = "Cast your line into the depths" .. tooltipSuffix
-    rod.RequiresHandle = false
-    rod.CanBeDropped = false
-    rod.Parent = localPlayer:WaitForChild("Backpack")
-    
-    rod.Activated:Connect(function()
-        self:CastRod()
-    end)
-    
-    rod.Equipped:Connect(function()
-        self:NotifyUI("FishingRodEquipped", { tier = currentRodTier })
-    end)
-    
-    rod.Unequipped:Connect(function()
-        if isFishing then
-            self:CancelFishing()
-        end
-    end)
-    
-    rodTool = rod
-    
-    -- Create Diving Gear Tool
-    local divingGear = Instance.new("Tool")
-    divingGear.Name = "Diving Gear"
-    divingGear.ToolTip = "Toggle diving mode"
-    divingGear.RequiresHandle = false
-    divingGear.CanBeDropped = false
-    divingGear.Parent = localPlayer:WaitForChild("Backpack")
-    
-    divingGear.Activated:Connect(function()
-        self:ToggleDiving()
-    end)
-    
-    divingGear.Equipped:Connect(function()
-        self:NotifyUI("GameMessage", {
-            Text = "🤿 Diving Gear — activate to dive, deactivate to surface",
-            Type = "Info",
-        })
-    end)
-    
-    divingGearTool = divingGear
-    
-    -- Create Harvest Tool
-    local harvest = Instance.new("Tool")
-    harvest.Name = "Harvest Tool"
-    harvest.ToolTip = "Collect resources and interact with the environment"
-    harvest.RequiresHandle = false
-    harvest.CanBeDropped = false
-    harvest.Parent = localPlayer:WaitForChild("Backpack")
-    
-    harvest.Activated:Connect(function()
-        self:HarvestNearestNode()
-    end)
-    
-    harvest.Equipped:Connect(function()
-        self:NotifyUI("HarvestToolEquipped", {})
-    end)
-    
-    harvestTool = harvest
-    
-    print("[FishingController] Tools created: Fishing Rod, Diving Gear, Harvest Tool")
+	local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+	
+	-- Fishing Rod
+	rodTool = Instance.new("Tool")
+	rodTool.Name = "Fishing Rod"
+	rodTool.ToolTip = "Cast your line" .. (isMobile and " (tap)" or " (click)")
+	rodTool.RequiresHandle = false
+	rodTool.CanBeDropped = false
+	rodTool.Parent = localPlayer:WaitForChild("Backpack")
+	
+	rodTool.Activated:Connect(function()
+		if currentState == STATE.IDLE then
+			self:BeginCast()
+		elseif currentState == STATE.BITING then
+			self:HookFish()
+		end
+	end)
+	
+	-- Diving Gear
+	divingGearTool = Instance.new("Tool")
+	divingGearTool.Name = "Diving Gear"
+	divingGearTool.ToolTip = isMobile and "Tap to toggle diving" or "Click to toggle diving"
+	divingGearTool.RequiresHandle = false
+	divingGearTool.CanBeDropped = false
+	divingGearTool.Parent = localPlayer:WaitForChild("Backpack")
+	divingGearTool.Activated:Connect(function()
+		local DivingController = Knit.GetController("DivingController")
+		if DivingController then
+			if DivingController.isDiving then DivingController:EndDive() else DivingController:StartDive() end
+		end
+	end)
+	
+	-- Harvest Tool
+	harvestTool = Instance.new("Tool")
+	harvestTool.Name = "Harvest Tool"
+	harvestTool.ToolTip = "Collect resources"
+	harvestTool.RequiresHandle = false
+	harvestTool.CanBeDropped = false
+	harvestTool.Parent = localPlayer:WaitForChild("Backpack")
+	harvestTool.Activated:Connect(function()
+		self:HarvestNearestNode()
+	end)
+	
+	print("[FishingController] Tools created")
 end
 
 -- ============================================================
--- DIVING GEAR TOGGLE
+-- CASTING: Parabolic arc → bobber → splash
 -- ============================================================
 
-function FishingController:ToggleDiving()
-    local DivingController = Knit.GetController("DivingController")
-    if not DivingController then return end
-    
-    -- Check current dive state
-    if DivingController.isDiving then
-        DivingController:EndDive()
-        self:NotifyUI("DiveEnded", {})
-    else
-        DivingController:StartDive()
-        self:NotifyUI("DiveStarted", {})
-    end
+function FishingController:BeginCast()
+	local tierCfg = ROD_TIERS[currentRodTier]
+	
+	-- Calculate cast target in front of player
+	local character = localPlayer.Character
+	if not character then return end
+	local rootPart = character:FindFirstChild("HumanoidRootPart")
+	if not rootPart then return end
+	
+	local forward = rootPart.CFrame.LookVector
+	forward = Vector3.new(forward.X, 0, forward.Z).Unit -- Flatten to horizontal
+	local targetPos = rootPart.Position + forward * tierCfg.CastDist
+	targetPos = Vector3.new(targetPos.X, waterSurfaceY, targetPos.Z) -- Place on water
+	
+	currentState = STATE.CASTING
+	
+	-- Play cast sound
+	self:NotifyUI("Casting", {})
+	
+	-- Animate bobber throw with parabolic arc (0.4s)
+	self:AnimateCastArc(rootPart.Position, targetPos, function()
+		-- Bobber lands — create visual
+		self:CreateBobber(targetPos)
+		currentState = STATE.FLOATING
+		
+		-- Ripple effect
+		self:CreateRipple(targetPos)
+		
+		-- Tell server we cast
+		local ToolService = Knit.GetService("ToolService")
+		if ToolService then
+			ToolService:CastLine(currentRodTier)
+		end
+	end)
+end
+
+function FishingController:AnimateCastArc(fromPos, toPos, callback)
+	-- Create a temporary visual projectile for the cast arc
+	-- Simplified: just create a small part that flies to the target
+	local projectile = Instance.new("Part")
+	projectile.Size = Vector3.new(0.3, 0.3, 0.3)
+	projectile.Shape = Enum.PartType.Ball
+	projectile.BrickColor = BrickColor.new("Bright red")
+	projectile.Anchored = true
+	projectile.CanCollide = false
+	projectile.Position = fromPos + Vector3.new(0, 3, 0)
+	projectile.Parent = Workspace
+	
+	local startTime = os.clock()
+	local duration = 0.4
+	
+	local connection
+	connection = RunService.Heartbeat:Connect(function()
+		local elapsed = os.clock() - startTime
+		local t = math.min(elapsed / duration, 1.0)
+		
+		-- Parabolic arc
+		local pos = fromPos:Lerp(toPos, t)
+		local arcHeight = math.sin(t * math.pi) * 8 -- 8 studs high
+		pos = Vector3.new(pos.X, pos.Y + arcHeight, pos.Z)
+		projectile.Position = pos
+		
+		if t >= 1.0 then
+			connection:Disconnect()
+			projectile:Destroy()
+			if callback then callback() end
+		end
+	end)
+end
+
+function FishingController:CreateBobber(position)
+	-- Simple bobber part on water surface
+	bobberPart = Instance.new("Part")
+	bobberPart.Name = "Bobber"
+	bobberPart.Size = Vector3.new(1, 0.5, 1)
+	bobberPart.Shape = Enum.PartType.Ball
+	bobberPart.BrickColor = BrickColor.new("Bright red")
+	bobberPart.Position = position
+	bobberPart.Anchored = true
+	bobberPart.CanCollide = false
+	bobberPart.Parent = Workspace
+	
+	-- Splash particles
+	self:CreateSplash(position)
+end
+
+function FishingController:CreateSplash(position)
+	-- Small ripple/splash effect (simplified — in production use ParticleEmitter)
+	local splash = Instance.new("Part")
+	splash.Size = Vector3.new(3, 0.1, 3)
+	splash.Position = Vector3.new(position.X, waterSurfaceY + 0.05, position.Z)
+	splash.Anchored = true
+	splash.CanCollide = false
+	splash.Transparency = 0.5
+	splash.BrickColor = BrickColor.new("White")
+	splash.Parent = Workspace
+	
+	-- Expand and fade
+	local sizeTween = TweenService:Create(splash,
+		TweenInfo.new(0.8, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{Size = Vector3.new(8, 0.1, 8), Transparency = 1})
+	sizeTween:Play()
+	sizeTween.Completed:Wait()
+	splash:Destroy()
+end
+
+function FishingController:CreateRipple(position)
+	-- Animated ripple rings at bobber location
+	for i = 1, 3 do
+		task.delay(0.15 * i, function()
+			local ring = Instance.new("Part")
+			ring.Size = Vector3.new(2, 0.05, 2)
+			ring.Shape = Enum.PartType.Cylinder
+			ring.Position = Vector3.new(position.X, waterSurfaceY + 0.02, position.Z)
+			ring.Anchored = true
+			ring.CanCollide = false
+			ring.Transparency = 0.6
+			ring.BrickColor = BrickColor.new("Toothpaste")
+			ring.Parent = Workspace
+			
+			TweenService:Create(ring,
+				TweenInfo.new(1.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+				{Size = Vector3.new(10, 0.05, 10), Transparency = 1}):Play()
+			task.delay(2, function() ring:Destroy() end)
+		end)
+	end
 end
 
 -- ============================================================
--- FISHING ROD MECHANICS
+-- FLOATING: Bobber bobs on water, fish shadow approaches
 -- ============================================================
-
-function FishingController:CastRod()
-    if isFishing then
-        self:ReelIn()
-        return
-    end
-    
-    local ToolService = Knit.GetService("ToolService")
-    if not ToolService then return end
-    
-    isCasting = true
-    
-    -- Notify UI
-    self:NotifyUI("Casting", {})
-    
-    -- Call server to cast line
-    local result = ToolService:CastLine(currentRodTier)
-    
-    if not result.success then
-        self:NotifyUI("GameMessage", {
-            Text = result.reason or "Can't fish here!",
-            Type = "Warning",
-        })
-        isCasting = false
-    end
-    -- On success, CastLine signal handler will call StartBiteWait
-end
 
 function FishingController:StartBiteWait(data)
-    isFishing = true
-    isCasting = false
-    
-    self:NotifyUI("LineCast", {
-        biteTime = data.biteTime,
-        zoneName = data.zoneName,
-    })
-    
-    -- Start bite check loop
-    if biteCheckThread then
-        biteCheckThread:Cancel()
-    end
-    
-    biteCheckThread = task.spawn(function()
-        while isFishing do
-            task.wait(0.5)
-            local ToolService = Knit.GetService("ToolService")
-            if ToolService then
-                local result = ToolService:CheckBite()
-                if result and result.bite then
-                    -- OnFishBite signal handler will fire
-                    break
-                elseif result and result.result == "Missed" then
-                    isFishing = false
-                    self:NotifyUI("GameMessage", {
-                        Text = "The fish got away!",
-                        Type = "Warning",
-                    })
-                    break
-                end
-            end
-            if not isFishing then break end
-        end
-    end)
+	currentState = STATE.FLOATING
+	biteTimer = os.clock() + (data.biteTime or 5)
+	
+	-- Bobber bobbing animation
+	self:AnimateBobberBobbing()
+	
+	-- Start bite check loop
+	task.spawn(function()
+		while currentState == STATE.FLOATING do
+			task.wait(0.2)
+			-- Show fish shadow approaching after ~70% of wait time
+			local elapsed = biteTimer - os.clock()
+			local totalWait = data.biteTime or 5
+			if elapsed < totalWait * 0.3 and not fishShadow then
+				self:ShowFishShadow()
+			end
+			-- Bobber animation intensifies as bite approaches
+			if elapsed < 1.5 then
+				self:AnimateBobberAgitation()
+			end
+		end
+	end)
+	
+	-- Timer-based bite trigger (server-independent fallback)
+	task.delay(data.biteTime or 5, function()
+		if currentState == STATE.FLOATING then
+			self:TriggerBite()
+		end
+	end)
 end
 
-function FishingController:OnFishBite(data)
-    if not isFishing then return end
-    
-    hasBite = true
-    reelWindowEnd = os.clock() + (data.reelWindow or 1.5)
-    
-    self:NotifyUI("FishBite", {
-        reelWindow = data.reelWindow,
-        zoneName = data.zoneName,
-    })
-    
-    -- Show reel-in prompt
-    self:NotifyUI("GameMessage", {
-        Text = "⚡ FISH ON! Click to reel in!",
-        Type = "Action",
-    })
+function FishingController:AnimateBobberBobbing()
+	if not bobberPart or bobberPart.Parent == nil then return end
+	
+	task.spawn(function()
+		while currentState == STATE.FLOATING or currentState == STATE.BITING do
+			local bobY = waterSurfaceY + math.sin(os.clock() * 3) * 0.3
+			bobberPart.Position = Vector3.new(bobberPart.Position.X, bobY, bobberPart.Position.Z)
+			task.wait(0.05)
+		end
+	end)
 end
 
-function FishingController:ReelIn()
-    if not isFishing or not hasBite then return end
-    
-    local ToolService = Knit.GetService("ToolService")
-    if not ToolService then return end
-    
-    hasBite = false
-    isFishing = false
-    
-    if biteCheckThread then
-        biteCheckThread:Cancel()
-        biteCheckThread = nil
-    end
-    
-    self:NotifyUI("Reeling", {})
-    
-    local result = ToolService:ReelIn()
-    
-    if not result or not result.success then
-        self:NotifyUI("GameMessage", {
-            Text = (result and result.reason) or "Nothing on the line...",
-            Type = "Warning",
-        })
-    end
-    -- On success, FishResult signal handler fires
+function FishingController:AnimateBobberAgitation()
+	if not bobberPart or currentState ~= STATE.FLOATING then return end
+	-- Bobber bobs faster and deeper as fish approaches
+	local fastBobY = waterSurfaceY + math.sin(os.clock() * 8) * 0.6
+	bobberPart.Position = Vector3.new(bobberPart.Position.X, fastBobY, bobberPart.Position.Z)
 end
 
-function FishingController:OnFishResult(data)
-    if data.result == "Caught" then
-        local creature = data.creature
-        if creature then
-            self:NotifyUI("GameMessage", {
-                Text = string.format("🎣 Caught %s %s! Worth ★%d", 
-                    creature.isShiny and "✨ SHINY" or "",
-                    creature.displayName or "something",
-                    data.sellPrice or 0),
-                Type = "Success",
-            })
-        end
-        
-    elseif data.result == "Escaped" or data.result == "Missed" then
-        self:NotifyUI("GameMessage", {
-            Text = data.reason or "The fish got away!",
-            Type = "Warning",
-        })
-    end
-    
-    isFishing = false
-    hasBite = false
-    self:NotifyUI("FishingEnded", { result = data.result })
-end
-
-function FishingController:CancelFishing()
-    isFishing = false
-    hasBite = false
-    isCasting = false
-    
-    if biteCheckThread then
-        biteCheckThread:Cancel()
-        biteCheckThread = nil
-    end
-    
-    self:NotifyUI("GameMessage", {
-        Text = "Fishing cancelled",
-        Type = "Info",
-    })
+function FishingController:ShowFishShadow()
+	if not bobberPart then return end
+	
+	fishShadow = Instance.new("Part")
+	fishShadow.Size = Vector3.new(3, 0.1, 6)
+	fishShadow.BrickColor = BrickColor.new("Really black")
+	fishShadow.Transparency = 0.7
+	fishShadow.Anchored = true
+	fishShadow.CanCollide = false
+	fishShadow.Position = Vector3.new(
+		bobberPart.Position.X + math.random(-5, 5),
+		waterSurfaceY - 5,
+		bobberPart.Position.Z + math.random(-5, 5)
+	)
+	fishShadow.Parent = Workspace
+	
+	-- Shadow circles toward bobber
+	TweenService:Create(fishShadow,
+		TweenInfo.new(3, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut),
+		{Position = Vector3.new(bobberPart.Position.X, waterSurfaceY - 3, bobberPart.Position.Z)}
+	):Play()
 end
 
 -- ============================================================
--- HARVEST TOOL MECHANICS
+-- BITING: Bobber plunges, 2-second window
+-- ============================================================
+
+function FishingController:TriggerBite()
+	if currentState ~= STATE.FLOATING then return end
+	currentState = STATE.BITING
+	biteWindowEnd = os.clock() + 2.0
+	
+	-- Bobber VIOLENTLY plunges
+	if bobberPart then
+		TweenService:Create(bobberPart,
+			TweenInfo.new(0.15, Enum.EasingStyle.Quad),
+			{Position = Vector3.new(bobberPart.Position.X, waterSurfaceY - 3, bobberPart.Position.Z)}
+		):Play()
+	end
+	
+	-- Splash effect
+	if bobberPart then
+		self:CreateSplash(bobberPart.Position)
+	end
+	
+	-- Screen flash
+	self:NotifyUI("FishBite", { reelWindow = 2.0 })
+	self:NotifyUI("GameMessage", { Text = "FISH ON! Tap anywhere!", Type = "Action" })
+	
+	-- Check if player misses the window
+	task.delay(2.0, function()
+		if currentState == STATE.BITING then
+			self:OnFishEscape("tooSlow")
+		end
+	end)
+end
+
+function FishingController:OnFishEscape(reason)
+	if fishShadow and fishShadow.Parent then
+		-- Fish swims away with bubble trail
+		local escapeTween = TweenService:Create(fishShadow,
+			TweenInfo.new(0.8, Enum.EasingStyle.Quad),
+			{Position = fishShadow.Position + Vector3.new(math.random(-20, 20), waterSurfaceY - 15, math.random(-20, 20)), Transparency = 1})
+		escapeTween:Play()
+		task.delay(1, function() if fishShadow then fishShadow:Destroy(); fishShadow = nil end end)
+	end
+	
+	self:CleanupFishing()
+	currentState = STATE.IDLE
+	
+	local msg = reason == "tooSlow" and "Too slow! Try again." or "The big one got away..."
+	self:NotifyUI("GameMessage", { Text = msg, Type = "Warning" })
+	self:NotifyUI("FishingEnded", { result = "Escaped" })
+end
+
+-- ============================================================
+-- HOOKING: Rod bends, line strains, 1-second struggle
+-- ============================================================
+
+function FishingController:HookFish()
+	if currentState ~= STATE.BITING then return end
+	currentState = STATE.HOOKING
+	
+	-- Line tightens, rod bends (visual feedback)
+	self:NotifyUI("Reeling", {})
+	
+	-- 1-second struggle
+	task.delay(0.3, function()
+		if currentState ~= STATE.HOOKING then return end
+		
+		-- Fish splashes at surface
+		if fishShadow then
+			TweenService:Create(fishShadow,
+				TweenInfo.new(0.2, Enum.EasingStyle.Quad),
+				{Position = Vector3.new(fishShadow.Position.X, waterSurfaceY, fishShadow.Position.Z)}
+			):Play()
+		end
+	end)
+	
+	-- 5% chance fish escapes
+	local escapes = math.random() <= 0.05
+	
+	task.delay(1.0, function()
+		if currentState ~= STATE.HOOKING then return end
+		
+		if escapes then
+			-- LINE SNAP!
+			self:OnFishEscape("snapped")
+		else
+			-- Fish caught! Call server to process
+			currentState = STATE.REELING
+			local ToolService = Knit.GetService("ToolService")
+			if ToolService then
+				ToolService:ReelIn()
+			end
+		end
+	end)
+end
+
+-- ============================================================
+-- CATCH RESULT
+-- ============================================================
+
+function FishingController:OnFishResult(data)
+	currentState = STATE.IDLE
+	self:CleanupFishing()
+	
+	if data.result == "Caught" then
+		local creature = data.creature
+		if creature then
+			-- Fish leaps out of water! (visual)
+			self:AnimateFishLeap(data)
+			
+			self:NotifyUI("GameMessage", {
+				Text = string.format("Caught %s! Worth %d credits",
+					creature.displayName or "something",
+					data.sellPrice or 0),
+				Type = "Success",
+			})
+		end
+	elseif data.result == "Escaped" then
+		self:OnFishEscape("escaped")
+	end
+	
+	self:NotifyUI("FishingEnded", { result = data.result })
+end
+
+function FishingController:AnimateFishLeap(data)
+	if not bobberPart then return end
+	
+	local leapPart = Instance.new("Part")
+	leapPart.Size = Vector3.new(1, 1, 3)
+	leapPart.BrickColor = BrickColor.new("Bright blue") -- Should use creature color
+	leapPart.Anchored = true
+	leapPart.CanCollide = false
+	leapPart.Position = bobberPart.Position
+	leapPart.Parent = Workspace
+	
+	local peakY = waterSurfaceY + 10
+	local landY = waterSurfaceY
+	
+	-- Leap up
+	TweenService:Create(leapPart,
+		TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{Position = Vector3.new(leapPart.Position.X, peakY, leapPart.Position.Z)}
+	):Play()
+	
+	-- Spin mid-air then splash
+	task.delay(0.3, function()
+		TweenService:Create(leapPart,
+			TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+			{Position = Vector3.new(leapPart.Position.X, landY - 1, leapPart.Position.Z)}
+		):Play()
+	end)
+	
+	-- Cleanup
+	task.delay(1, function() if leapPart then leapPart:Destroy() end end)
+end
+
+function FishingController:CleanupFishing()
+	if bobberPart and bobberPart.Parent then bobberPart:Destroy() end
+	bobberPart = nil
+	if fishShadow and fishShadow.Parent then fishShadow:Destroy() end
+	fishShadow = nil
+	biteTimer = 0
+	biteWindowEnd = 0
+	fishData = nil
+	currentState = STATE.IDLE
+end
+
+-- ============================================================
+-- HARVEST TOOL
 -- ============================================================
 
 function FishingController:HarvestNearestNode()
-    -- Simple raycast from camera to detect resource nodes
-    local camera = workspace.CurrentCamera
-    local raycastParams = RaycastParams.new()
-    raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
-    raycastParams.FilterDescendantsInstances = { localPlayer.Character }
-    
-    local rayResult = workspace:Raycast(
-        camera.CFrame.Position,
-        camera.CFrame.LookVector * 50,
-        raycastParams
-    )
-    
-    if rayResult then
-        local hit = rayResult.Instance
-        local harvestType = nil
-        
-        -- Detect node type by collection group or tag
-        if hit:GetAttribute("ResourceType") then
-            harvestType = hit:GetAttribute("ResourceType")
-        elseif hit:GetAttribute("CreatureNode") then
-            harvestType = "CreatureEncounter"
-        end
-        
-        if harvestType then
-            local ToolService = Knit.GetService("ToolService")
-            if ToolService then
-                self:NotifyUI("Harvesting", { type = harvestType })
-                local result = ToolService:HarvestNode(harvestType)
-                
-                if not result.success then
-                    self:NotifyUI("GameMessage", {
-                        Text = result.reason or "Nothing to harvest here",
-                        Type = "Warning",
-                    })
-                end
-            end
-        else
-            self:NotifyUI("GameMessage", {
-                Text = "Nothing to harvest here",
-                Type = "Info",
-            })
-        end
-    else
-        self:NotifyUI("GameMessage", {
-            Text = "Nothing in range",
-            Type = "Info",
-        })
-    end
+	local camera = Workspace.CurrentCamera
+	local raycastParams = RaycastParams.new()
+	raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+	raycastParams.FilterDescendantsInstances = { localPlayer.Character }
+	
+	local rayResult = Workspace:Raycast(
+		camera.CFrame.Position,
+		camera.CFrame.LookVector * 30,
+		raycastParams
+	)
+	
+	if rayResult then
+		local harvestType = rayResult.Instance:GetAttribute("ResourceType")
+			or (rayResult.Instance:GetAttribute("CreatureNode") and "CreatureEncounter")
+		
+		if harvestType then
+			local ToolService = Knit.GetService("ToolService")
+			if ToolService then
+				self:NotifyUI("Harvesting", { type = harvestType })
+				ToolService:HarvestNode(harvestType)
+			end
+		end
+	end
 end
 
 function FishingController:OnHarvestResult(data)
-    if data and data.type then
-        self:NotifyUI("GameMessage", {
-            Text = string.format("🪨 Collected %d %s", data.amount or 0, data.type),
-            Type = "Success",
-        })
-    end
-end
-
--- ============================================================
--- Rod Tier Upgrades
--- ============================================================
-
-function FishingController:UpgradeRod(newTier)
-    if ROD_TIERS[newTier] then
-        currentRodTier = newTier
-        self:NotifyUI("GameMessage", {
-            Text = string.format("🎣 Rod upgraded to %s!", newTier),
-            Type = "Success",
-        })
-        return true
-    end
-    return false
+	if data and data.type then
+		self:NotifyUI("GameMessage", {
+			Text = string.format("Collected %d %s", data.amount or 0, data.type),
+			Type = "Success",
+		})
+	end
 end
 
 -- ============================================================
@@ -410,12 +575,10 @@ end
 -- ============================================================
 
 function FishingController:NotifyUI(eventName, data)
-    local UIController = Knit.GetController("UIController")
-    if UIController then
-        if UIController.HandleFishingEvent then
-            UIController:HandleFishingEvent(eventName, data)
-        end
-    end
+	local UIController = Knit.GetController("UIController")
+	if UIController and UIController.HandleFishingEvent then
+		UIController:HandleFishingEvent(eventName, data)
+	end
 end
 
 -- ============================================================
@@ -423,19 +586,10 @@ end
 -- ============================================================
 
 function FishingController:KnitStop()
-    if rodTool and rodTool.Parent then
-        rodTool:Destroy()
-    end
-    if divingGearTool and divingGearTool.Parent then
-        divingGearTool:Destroy()
-    end
-    if harvestTool and harvestTool.Parent then
-        harvestTool:Destroy()
-    end
-    if biteCheckThread then
-        biteCheckThread:Cancel()
-        biteCheckThread = nil
-    end
+	self:CleanupFishing()
+	if rodTool and rodTool.Parent then rodTool:Destroy() end
+	if divingGearTool and divingGearTool.Parent then divingGearTool:Destroy() end
+	if harvestTool and harvestTool.Parent then harvestTool:Destroy() end
 end
 
 return FishingController

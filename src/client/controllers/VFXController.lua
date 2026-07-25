@@ -79,6 +79,16 @@ function VFXController:KnitStart()
             self:TransitionZoneVFX(currentZoneIndex)
         end
     end)
+
+    -- Listen for weather changes
+    local WeatherService = Knit.GetService("WeatherService")
+    if WeatherService then
+        WeatherService.Client:Get("WeatherStateChanged"):Connect(function(data)
+            if data.weatherType then
+                self:ApplyWeatherVFX(data.weatherType, data)
+            end
+        end)
+    end
 end
 
 -- ================================================================
@@ -716,10 +726,172 @@ function VFXController:UpdateDepthPressure(depth, maxDepth)
     end
 end
 
+-- ================================================================
+-- Time of Day VFX
+-- ================================================================
+
+local timeOfDayMultiplier = 1.0
+
+function VFXController:SetTimeOfDayMultiplier(mult)
+    timeOfDayMultiplier = mult or 1.0
+    -- Adjust bioluminescent particle intensity
+    if zoneVFXObjects.vents then
+        for _, vent in ipairs(zoneVFXObjects.vents) do
+            -- Vent glow light brightness affected by night
+            if vent.rim and vent.rim:FindFirstChildOfClass("PointLight") then
+                local light = vent.rim:FindFirstChildOfClass("PointLight")
+                light.Brightness = 2 + timeOfDayMultiplier * 2
+            end
+        end
+    end
+end
+
+function VFXController:GetTimeOfDayMultiplier()
+    return timeOfDayMultiplier
+end
+
+-- ================================================================
+-- Weather VFX
+-- ================================================================
+
+local weatherVFX = {
+    currentWeather = "Clear",
+    weatherParticles = {},   -- Active weather particle objects
+}
+
+function VFXController:ApplyWeatherVFX(weatherType, weatherData)
+    -- Clean up previous weather VFX
+    self:ClearWeatherVFX()
+
+    weatherVFX.currentWeather = weatherType
+
+    if weatherType == "Stormy" then
+        self:CreateStormVFX()
+    elseif weatherType == "Bioluminescent" then
+        self:CreateBioluminescentBloom()
+    elseif weatherType == "BloodMoon" then
+        self:CreateBloodMoonVFX()
+    end
+    -- "Clear" uses no extra VFX
+end
+
+function VFXController:ClearWeatherVFX()
+    for _, obj in ipairs(weatherVFX.weatherParticles) do
+        if obj.cleanup then obj.cleanup()
+        elseif obj.Destroy then obj:Destroy()
+        end
+    end
+    weatherVFX.weatherParticles = {}
+end
+
+-- Storm VFX: extra bubble streams, darker tint
+function VFXController:CreateStormVFX()
+    -- Spawn storm bubble streams around the well
+    local wellRadius = 180
+    for i = 1, 15 do
+        local x = math.random(-wellRadius, wellRadius)
+        local z = math.random(-wellRadius, wellRadius)
+        local y = -math.random(0, 500)
+
+        local anchor = Instance.new("Part")
+        anchor.Name = "StormParticle"
+        anchor.Size = Vector3.new(1, 1, 1)
+        anchor.Position = Vector3.new(x, y, z)
+        anchor.Anchored = true
+        anchor.CanCollide = false
+        anchor.Transparency = 1
+        anchor.CastShadow = false
+        anchor.Parent = workspace
+
+        local attachment = Instance.new("Attachment", anchor)
+        local emitter = Instance.new("ParticleEmitter")
+        emitter.Texture = "rbxassetid://585075134" -- Bubble texture
+        emitter.Color = ColorSequence.new(Color3.fromRGB(100, 130, 160))
+        emitter.Size = NumberSequence.new(0.1, 0.4)
+        emitter.Transparency = NumberSequence.new(0.4, 1)
+        emitter.Lifetime = NumberRange.new(1, 3)
+        emitter.Rate = 5
+        emitter.Speed = NumberRange.new(8, 20)
+        emitter.SpreadAngle = Vector2.new(30, 30)
+        emitter.EmissionDirection = Enum.NormalId.Top
+        emitter.VelocityInheritance = 0.5
+        emitter.Parent = attachment
+
+        table.insert(weatherVFX.weatherParticles, {
+            anchor = anchor,
+            cleanup = function() anchor:Destroy() end
+        })
+    end
+end
+
+-- Bioluminescent Bloom: neon particles everywhere
+function VFXController:CreateBioluminescentBloom()
+    local camera = workspace.CurrentCamera
+    for i = 1, 8 do
+        local attachment = Instance.new("Attachment", camera)
+        attachment.Name = "BioBloom_" .. i
+
+        local emitter = Instance.new("ParticleEmitter")
+        emitter.Texture = "rbxassetid://2442214466" -- Sparkle
+        emitter.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, Color3.fromHex("#39FF14")),   -- BioGreen
+            ColorSequenceKeypoint.new(0.5, Color3.fromHex("#00E5FF")), -- Cyan
+            ColorSequenceKeypoint.new(1, Color3.fromHex("#8B5CF6")),   -- DeepPurple
+        })
+        emitter.Size = NumberSequence.new(0.05, 0.15)
+        emitter.Transparency = NumberSequence.new(0.2, 0.7)
+        emitter.Lifetime = NumberRange.new(2, 5)
+        emitter.Rate = 15
+        emitter.Speed = NumberRange.new(0.5, 2)
+        emitter.SpreadAngle = Vector2.new(180, 180)
+        emitter.VelocityInheritance = 0.1
+        emitter.LightEmission = 0.5
+        emitter.RotSpeed = NumberRange.new(-60, 60)
+        emitter.Parent = attachment
+
+        table.insert(weatherVFX.weatherParticles, {
+            attachment = attachment,
+            cleanup = function() attachment:Destroy() end
+        })
+    end
+end
+
+-- Blood Moon VFX: red-tinted overlay
+function VFXController:CreateBloodMoonVFX()
+    -- Create a subtle red overlay frame
+    local playerGui = Player:WaitForChild("PlayerGui")
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "BloodMoonOverlay"
+    gui.IgnoreGuiInset = true
+    gui.ResetOnSpawn = false
+    gui.DisplayOrder = 3
+    gui.Parent = playerGui
+
+    local frame = Instance.new("Frame")
+    frame.Name = "BloodTint"
+    frame.Size = UDim2.fromScale(1, 1)
+    frame.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
+    frame.BackgroundTransparency = 1
+    frame.BorderSizePixel = 0
+    frame.Parent = gui
+
+    -- Pulse red tint
+    TweenService:Create(frame, TweenInfo.new(0.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), {
+        BackgroundTransparency = 0.85
+    }):Play()
+
+    table.insert(weatherVFX.weatherParticles, {
+        gui = gui,
+        frame = frame,
+        cleanup = function() gui:Destroy() end
+    })
+end
+
 function VFXController:KnitStop()
     RunService:UnbindFromRenderStep("VFXUpdate")
     RunService:UnbindFromRenderStep("ZoneVFXCheck")
     self:CleanupZoneEnvironment()
+    self:ClearWeatherVFX()
 end
 
 return VFXController

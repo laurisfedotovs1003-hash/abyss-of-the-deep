@@ -2135,4 +2135,420 @@ Config.CreatureMarket = {
     MaxTradeHistoryEntries = 50,
 }
 
+-- ============================================================
+-- Boss Configuration (5 zone bosses)
+-- ============================================================
+
+Config.Bosses = {
+    {
+        Key = "CoralGuardian",
+        Name = "Coral Guardian",
+        Zone = "Sunlight Zone",
+        ZoneIndex = 1,
+        DepthMin = 150,
+        DepthMax = 200,
+        Rarity = "Common",
+        HP = 500,
+        BiteWindow = 2.5,
+        DodgeCount = 2,
+        DodgeWarningTime = 1.5,
+        SpawnCooldown = 600,
+        EngagementRange = 40,
+        ArenaRadius = 80,
+        AttackPatterns = {
+            { name = "Claw_Slam", damage = 15, windup = 3.0, type = "cone" },
+            { name = "Coral_Shrapnel", damage = 6, windup = 2.0, type = "projectile", count = 5 },
+            { name = "Anemone_Shield", damage = 0, windup = 0, type = "passive", triggerPercent = 50 },
+        },
+        Rewards = {
+            Credits = 100,
+            XP = 50,
+            Material = "CoralFragment",
+            Title = "Reef Champion",
+            CosmeticDrop = { item = "GuardianShell", chance = 0.10 },
+        },
+        ModelAssetId = 0,
+    },
+    {
+        Key = "KrakenWraith",
+        Name = "Kraken Wraith",
+        Zone = "Twilight Zone",
+        ZoneIndex = 2,
+        DepthMin = 600,
+        DepthMax = 900,
+        Rarity = "Uncommon",
+        HP = 1200,
+        BiteWindow = 2.0,
+        DodgeCount = 3,
+        DodgeWarningTime = 1.3,
+        SpawnCooldown = 900,
+        EngagementRange = 50,
+        ArenaRadius = 100,
+        AttackPatterns = {
+            { name = "Tentacle_Grab", damage = 20, windup = 2.0, type = "grab" },
+            { name = "Ink_Cloud", damage = 0, windup = 0, type = "blind", duration = 4 },
+            { name = "Phase_Rush", damage = 30, windup = 1.5, type = "charge" },
+        },
+        Rewards = {
+            Credits = 300,
+            XP = 200,
+            Material = "WraithEssence",
+            Title = "Twilight Exorcist",
+            CosmeticDrop = { item = "WraithMantle", chance = 0.15 },
+        },
+        ModelAssetId = 0,
+    },
+    {
+        Key = "AbyssalLeviathan",
+        Name = "Abyssal Leviathan",
+        Zone = "Midnight Zone",
+        ZoneIndex = 3,
+        DepthMin = 2500,
+        DepthMax = 3500,
+        Rarity = "Rare",
+        HP = 2500,
+        HeadsCount = 3,
+        HPPerHead = 833,
+        BiteWindow = 2.0,
+        DodgeCount = 4,
+        DodgeWarningTime = 1.2,
+        SpawnCooldown = 1200,
+        EngagementRange = 60,
+        ArenaRadius = 120,
+        AttackPatterns = {
+            { name = "Lure_Bite", damage = 25, windup = 1.5, type = "lunge" },
+            { name = "Triple_Beam", damage = 40, windup = 3.0, type = "sweep" },
+            { name = "Vent_Eruption", damage = 10, windup = 2.0, type = "aoe_dot", triggerPercent = 66 },
+        },
+        Rewards = {
+            Credits = 800,
+            XP = 500,
+            Material = "LeviathanScale",
+            Title = "Midnight Slayer",
+            CosmeticDrop = { item = "LeviathanJawTrophy", chance = 0.20 },
+            GuaranteedDrop = "LeviathanTooth",
+        },
+        ModelAssetId = 0,
+    },
+    {
+        Key = "VoidLeviathan",
+        Name = "Void Leviathan",
+        Zone = "Abyssal Zone",
+        ZoneIndex = 4,
+        DepthMin = 4800,
+        DepthMax = 5500,
+        Rarity = "Epic",
+        HP = 5000,
+        BiteWindow = 3.0,
+        DodgeCount = 5,
+        DodgeWarningTime = 1.0,
+        SpawnCooldown = 1800,
+        EngagementRange = 70,
+        ArenaRadius = 160,
+        AttackPatterns = {
+            { name = "Rock_Phase", damage = 35, windup = 0, type = "ambush", delay = 2.0 },
+            { name = "Void_Scream", damage = 15, windup = 2.0, type = "aoe", disorient = 3 },
+            { name = "Phantom_Swarm", damage = 20, windup = 1.0, type = "split", triggerPercent = 50, copyCount = 3 },
+            { name = "Abyssal_Crush", damage = 50, windup = 5.0, type = "vortex" },
+        },
+        Rewards = {
+            Credits = 2000,
+            XP = 1500,
+            Material = "VoidCrystal",
+            Title = "Void Walker",
+            CosmeticDrop = { item = "VoidEssenceAura", chance = 0.25 },
+            GuaranteedDrop = "VoidFragment",
+        },
+        ModelAssetId = 0,
+    },
+    {
+        Key = "TheAncientOne",
+        Name = "The Ancient One",
+        Zone = "Trenches",
+        ZoneIndex = 5,
+        DepthMin = 9500,
+        DepthMax = 11000,
+        Rarity = "Legendary",
+        HP = 10000,
+        BiteWindow = 2.0,
+        DodgeCount = 6,
+        DodgeWarningTime = 0.8,
+        SpawnCooldown = 3600,
+        EngagementRange = 100,
+        ArenaRadius = 200,
+        AttackPatterns = {
+            { name = "Gaze_of_the_Deep", damage = 2, windup = 0, type = "passive_dot", ticksPerSecond = true },
+            { name = "Tentacle_Sweep", damage = 60, windup = 4.0, type = "sweep" },
+            { name = "Crushing_Depths", damage = 0, windup = 0, type = "passive", triggerPercent = 50, effect = "doubleOxygen" },
+            { name = "Abyssal_Roar", damage = 40, windup = 6.0, type = "rain", count = 8 },
+            { name = "Final_Gaze", damage = 80, windup = 1.5, type = "lookAway", triggerPercent = 10 },
+        },
+        Rewards = {
+            Credits = 5000,
+            XP = 4000,
+            Material = "AncientFragment",
+            Title = "Ancient Bane",
+            CosmeticDrop = { item = "AncientSuitSkin", chance = 0.50 },
+            GuaranteedDrop = "AncientEyeShard",
+        },
+        ModelAssetId = 0,
+    },
+}
+
+-- ============================================================
+-- Boss Materials
+-- ============================================================
+
+Config.BossMaterials = {
+    CoralFragment = {
+        DisplayName = "Coral Fragment",
+        Description = "A piece of the Coral Guardian's shell. Pulses with warm energy.",
+        Rarity = "Rare",
+    },
+    WraithEssence = {
+        DisplayName = "Wraith Essence",
+        Description = "Ethereal residue from the Kraken Wraith. Cold to the touch and semi-transparent.",
+        Rarity = "Rare",
+    },
+    LeviathanScale = {
+        DisplayName = "Leviathan Scale",
+        Description = "An impossibly tough scale from the Abyssal Leviathan. Light bends around it.",
+        Rarity = "Epic",
+    },
+    LeviathanTooth = {
+        DisplayName = "Leviathan Tooth",
+        Description = "A serrated fang from the Abyssal Leviathan. Still sharp enough to cut steel.",
+        Rarity = "Epic",
+    },
+    VoidCrystal = {
+        DisplayName = "Void Crystal",
+        Description = "Crystallized void energy from the Void Leviathan. Absorbs all light that touches it.",
+        Rarity = "Epic",
+    },
+    VoidFragment = {
+        DisplayName = "Void Fragment",
+        Description = "A shard of the Void Leviathan's skeleton. Cold and weightless.",
+        Rarity = "Epic",
+    },
+    AncientFragment = {
+        DisplayName = "Ancient Fragment",
+        Description = "A piece of The Ancient One's eye casing. It seems to watch you.",
+        Rarity = "Legendary",
+    },
+    AncientEyeShard = {
+        DisplayName = "Ancient Eye Shard",
+        Description = "A crystallized tear from The Ancient One. Contains the light of a dying star.",
+        Rarity = "Legendary",
+    },
+}
+
+-- ============================================================
+-- Boss-Tier Fishing Rods (crafted from boss materials)
+-- ============================================================
+
+Config.BossRods = {
+    GuardianRod = {
+        Name = "Guardian Rod",
+        Tier = 6,
+        Description = "Crafted from the Coral Guardian's essence. Reef creatures respect its power.",
+        CraftCosts = {
+            CoralFragment = 3,
+            WraithEssence = 2,
+            LeviathanScale = 1,
+            LeviathanTooth = 1,
+        },
+        Effects = {
+            CatchRateBonus = 0.15,
+            BiteTimeReduction = 1,
+            RestrictedZones = { 1, 2 },
+        },
+    },
+    MasterBossRod = {
+        Name = "Master Boss Rod",
+        Tier = 7,
+        Description = "Forged from the void itself. All creatures feel its pull.",
+        CraftCosts = {
+            VoidCrystal = 2,
+            VoidFragment = 1,
+            LeviathanScale = 3,
+        },
+        Effects = {
+            CatchRateBonus = 0.20,
+            RareChanceBonus = 0.10,
+        },
+    },
+    LegendaryRod = {
+        Name = "Legendary Rod",
+        Tier = 8,
+        Description = "Contains the power of The Ancient One. The ocean itself obeys.",
+        CraftCosts = {
+            AncientFragment = 3,
+            AncientEyeShard = 1,
+            VoidCrystal = 3,
+        },
+        Effects = {
+            CatchRateBonus = 0.25,
+            LegendaryChanceBonus = 0.15,
+            RevealsShiny = true,
+        },
+    },
+}
+
+-- ============================================================
+-- Boss-Related Shop Items
+-- ============================================================
+
+Config.ShopItems.BossBait = {
+    Name = "Boss Lure",
+    Description = "Forces the zone boss to spawn immediately (if available)",
+    Category = "Consumable",
+    Price = 200,
+    PriceCurrency = "Credits",
+    Effect = "SpawnBoss",
+    MaxStack = 1,
+}
+Config.ShopItems.BossRadar = {
+    Name = "Boss Sonar",
+    Description = "Shows the exact location of the nearest boss for 5 minutes",
+    Category = "Consumable",
+    Price = 100,
+    PriceCurrency = "Credits",
+    Effect = "RevealBoss",
+    EffectValue = 300,
+    MaxStack = 3,
+}
+
+-- ============================================================
+-- Boss Daily Quest (1 per day)
+-- ============================================================
+
+Config.DailyQuests.Daily_BossHunter = {
+    Name = "Boss Hunter",
+    Description = "Defeat any zone boss",
+    Type = "Daily",
+    Condition = { type = "BossDefeated", boss = "any", count = 1 },
+    Rewards = { Credits = 300, Consumable = "BossBait", count = 1 },
+    XP_Reward = 500,
+    Difficulty = "Hard",
+}
+
+-- ============================================================
+-- Boss Milestone Quests (one-time)
+-- ============================================================
+
+Config.MilestoneQuests.Milestone_DefeatCoralGuardian = {
+    Name = "Guardian's Downfall",
+    Description = "Defeat the Coral Guardian in the Sunlight Zone",
+    Condition = { type = "BossDefeated", boss = "CoralGuardian" },
+    Rewards = { Credits = 500, ResearchPoints = 5 },
+    XP_Reward = 500,
+    Order = 15,
+}
+Config.MilestoneQuests.Milestone_DefeatKrakenWraith = {
+    Name = "Wraith Hunter",
+    Description = "Defeat the Kraken Wraith in the Twilight Zone",
+    Condition = { type = "BossDefeated", boss = "KrakenWraith" },
+    Rewards = { Credits = 1000, ResearchPoints = 10 },
+    XP_Reward = 750,
+    Order = 16,
+}
+Config.MilestoneQuests.Milestone_DefeatLeviathan = {
+    Name = "Leviathan's Bane",
+    Description = "Defeat the Abyssal Leviathan in the Midnight Zone",
+    Condition = { type = "BossDefeated", boss = "AbyssalLeviathan" },
+    Rewards = { Credits = 2000, ResearchPoints = 15 },
+    XP_Reward = 1000,
+    Order = 17,
+}
+Config.MilestoneQuests.Milestone_DefeatVoid = {
+    Name = "Void Cleanser",
+    Description = "Defeat the Void Leviathan in the Abyssal Zone",
+    Condition = { type = "BossDefeated", boss = "VoidLeviathan" },
+    Rewards = { Credits = 4000, ResearchPoints = 25 },
+    XP_Reward = 1500,
+    Order = 18,
+}
+Config.MilestoneQuests.Milestone_DefeatAncient = {
+    Name = "Ancient's End",
+    Description = "Defeat The Ancient One in the Trenches",
+    Condition = { type = "BossDefeated", boss = "TheAncientOne" },
+    Rewards = { Credits = 8000, ResearchPoints = 50 },
+    XP_Reward = 3000,
+    Order = 19,
+}
+
+-- ============================================================
+-- Boss Achievements
+-- ============================================================
+
+Config.Achievements.Achievement_DefeatAllBosses = {
+    Name = "Leviathan Bane",
+    Description = "Defeat all 5 zone bosses",
+    Condition = { type = "AllBossesDefeated" },
+    Rewards = { Credits = 10000, ResearchPoints = 50 },
+    XP_Reward = 10000,
+}
+Config.Achievements.Achievement_SpeedKiller = {
+    Name = "Speed Killer",
+    Description = "Defeat a boss in under 5 minutes",
+    Condition = { type = "BossDefeatedFast", timeLimit = 300 },
+    Rewards = { Credits = 1000, ResearchPoints = 10 },
+    XP_Reward = 1000,
+}
+Config.Achievements.Achievement_Untouchable = {
+    Name = "Untouchable",
+    Description = "Defeat any boss without taking damage",
+    Condition = { type = "BossDefeatedFlawless" },
+    Rewards = { Credits = 2000, ResearchPoints = 25 },
+    XP_Reward = 2000,
+}
+
+-- ============================================================
+-- Boss Fight Scaling Constants
+-- ============================================================
+
+Config.BossFight = {
+    MultiplayerHPScaling = 0.5,       -- HP multiplier per additional player: HP * (1 + 0.5 * (N-1))
+    DamageBonusForTopDPS = 0.25,      -- +25% Credits for highest damage dealer
+    MinDamageForReward = 0.01,        -- Must deal 1%+ of total HP to qualify for rewards
+    ArenaLeaveTimeout = 5,            -- Seconds outside arena before fight resets
+    BossReengageCooldown = 300,       -- 5 min cooldown after death
+    IdleDespawnTime = 600,            -- 10 min without engagement → despawn
+    IdleDespawnCooldown = 0.5,        -- 50% cooldown after idle despawn
+    MaxClicksPerSecond = 8,           -- Anti-auto-clicker cap
+}
+
+-- ============================================================
+-- Anomaly-Boss Interaction Modifiers
+-- ============================================================
+
+Config.AnomalyBossModifiers = {
+    CorruptedDepths = {
+        BossDamageMultiplier = 1.25,
+        BossRewardMultiplier = 1.5,
+        BossSpawnCooldownMultiplier = 1.0,
+    },
+    EnchantedWaters = {
+        BossDamageMultiplier = 1.0,
+        BossRewardMultiplier = 1.25,
+        BossSpawnCooldownMultiplier = 0.5,
+    },
+    BioluminescentBloom = {
+        BossDamageMultiplier = 0.8,
+        BossRewardMultiplier = 1.0,
+        BossSpawnCooldownMultiplier = 1.0,
+    },
+    AbyssalSurge = {
+        BossDamageMultiplier = 1.5,
+        BossRewardMultiplier = 2.0,
+        BossSpawnCooldownMultiplier = 0.75,
+    },
+    AncientMigration = {
+        BossDamageMultiplier = 1.0,
+        BossRewardMultiplier = 3.0,
+        BossSpawnCooldownMultiplier = 0.25,
+        AncientOnePermanentOpen = true,
+    },
+}
+
 return Config
